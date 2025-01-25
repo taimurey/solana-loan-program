@@ -1,10 +1,12 @@
-use super::{Pool, UserStats};
+use super::{Pool, UserStats, POOL_VAULT};
 use crate::error::ErrorCode;
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, Mint, Token, TokenAccount, Transfer},
 };
+pub const DEPOSIT_SEED: &str = "deposit";
+pub const USER_STATS: &str = "user_stats";
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
@@ -15,7 +17,7 @@ pub struct Deposit<'info> {
         init,
         payer = user,
         space = 8 + std::mem::size_of::<Deposit>(),
-        seeds = [b"deposit", user.key.as_ref(), pool.key().as_ref(), &[pool.load()?.deposit_count.try_into().unwrap()]],
+        seeds = [DEPOSIT_SEED.as_bytes(), user.key.as_ref(), pool.key().as_ref(), &[pool.load()?.deposit_count.try_into().unwrap()]],
         bump
     )]
     pub deposit: AccountLoader<'info, DepositState>,
@@ -32,7 +34,7 @@ pub struct Deposit<'info> {
 
     #[account(
         mut,
-        seeds = [b"vault", pool.key().as_ref()],
+        seeds = [POOL_VAULT.as_bytes(), pool.key().as_ref()],
         bump = pool.load()?.vault_bump,
         token::mint = token_mint,
     )]
@@ -42,7 +44,7 @@ pub struct Deposit<'info> {
         init,
         payer = user,
         space = 8 + std::mem::size_of::<UserStats>(),
-        seeds = [b"user_stats", user.key.as_ref()],
+        seeds = [USER_STATS.as_bytes(), user.key.as_ref()],
         bump
     )]
     pub user_stats: AccountLoader<'info, UserStats>,
@@ -64,6 +66,8 @@ pub struct DepositState {
     pub total_interest: u64,
     pub payment_frequency: u64,
     pub loan_term_months: u64,
+    pub maturity_date: i64,
+    pub agreement_hash: [u8; 32],
 }
 
 pub fn process_deposit(
@@ -72,6 +76,18 @@ pub fn process_deposit(
     fee_percent: u8,
     agreement_hash: [u8; 32],
 ) -> Result<()> {
+    // Check if pool is paused
+    let pool = ctx.accounts.pool.load()?;
+    if pool.is_paused {
+        return Err(ErrorCode::PoolPaused.into());
+    }
+
+    // Verify agreement hash matches pool template
+    require!(
+        agreement_hash == pool.agreement_template_hash,
+        ErrorCode::InvalidAgreement
+    );
+
     // Fee calculation with overflow protection
     let fee = amount
         .checked_mul(u64::from(fee_percent))
@@ -93,8 +109,11 @@ pub fn process_deposit(
     let deposit = &mut ctx.accounts.deposit.load_init()?;
     deposit.owner = *ctx.accounts.user.key;
     deposit.amount = net_amount;
+    deposit.agreement_hash = agreement_hash;
     deposit.start_time = Clock::get()?.unix_timestamp;
     deposit.fee_percent = fee_percent;
+    deposit.maturity_date = deposit.start_time + (pool.loan_term_months as i64) * 30 * 86400;
+
     deposit.total_interest = net_amount
         .checked_mul(ctx.accounts.pool.load()?.interest_rate)
         .and_then(|v| v.checked_mul(ctx.accounts.pool.load().ok()?.loan_term_months))

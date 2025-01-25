@@ -5,7 +5,7 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-gabriel = "9isXdCr1QEYnU3q9Zvak8ANoHwj7Tejkfx8SnhQ7qTva"
+loan_program = "DeDyjnQopMBxYJMT8UYyjKCZ1ZcYTrCQLmkS2dFzezgY"
 
 [registry]
 url = "https://api.apr.dev"

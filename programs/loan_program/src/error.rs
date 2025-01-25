@@ -8,4 +8,10 @@ pub enum ErrorCode {
     ArithmeticError,
     #[msg("Invalid account configuration")]
     InvalidAccountConfig,
+    #[msg("Pool is paused")]
+    PoolPaused,
+    #[msg("Invalid agreement hash")]
+    InvalidAgreement,
+    #[msg("Unauthorized access")]
+    Unauthorized,
 }
