@@ -39,13 +39,8 @@ pub mod loan_program {
     }
 
     // Make a deposit
-    pub fn deposit(
-        ctx: Context<Deposit>,
-        amount: u64,
-        fee_percent: u8,
-        agreement_hash: [u8; 32],
-    ) -> Result<()> {
-        process_deposit(ctx, amount, fee_percent, agreement_hash)
+    pub fn deposit(ctx: Context<Deposit>, amount: u64, agreement_hash: [u8; 32]) -> Result<()> {
+        process_deposit(ctx, amount, agreement_hash)
     }
 
     // Withdraw funds

@@ -6,7 +6,7 @@ use anchor_spl::{
     token::{self, Mint, Token, TokenAccount, Transfer},
 };
 
-use super::{DepositState, Pool};
+use super::{DepositState, Pool, UserStats, POOL_VAULT, VAULT_AUTHORITY};
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
@@ -16,7 +16,11 @@ pub struct Withdraw<'info> {
     #[account(mut)]
     pub deposit: AccountLoader<'info, DepositState>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [b"user_stats", user.key.as_ref()],
+        bump,
+    )]
     pub user_stats: AccountLoader<'info, UserStats>,
 
     #[account(
@@ -28,44 +32,47 @@ pub struct Withdraw<'info> {
 
     #[account(
         mut,
-        seeds = [b"vault", pool.key().as_ref()],
-        bump = pool.load()?.vault_bump,
+        seeds = [POOL_VAULT.as_bytes(), pool.key().as_ref()],
+        bump,
         token::mint = token_mint,
     )]
     pub pool_vault: Account<'info, TokenAccount>,
 
     /// CHECK:
     #[account(
-        seeds = [b"vault_authority", pool.key().as_ref()],
+        seeds = [VAULT_AUTHORITY.as_bytes(), pool.key().as_ref()],
         bump
     )]
     pub vault_authority: AccountInfo<'info>,
 
+    #[account(mut)]
     pub pool: AccountLoader<'info, Pool>,
     pub token_mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
-
-#[account(zero_copy(unsafe))]
-#[repr(packed)]
-#[derive(Default, Debug)]
-pub struct UserStats {
-    pub total_deposited: u64,
-    pub total_withdrawn: u64,
-    pub available_for_withdraw: u64,
-}
-
 pub fn process_withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+    // Load the pool and deposit accounts
+    let pool = &mut ctx.accounts.pool.load_mut()?;
     let deposit = ctx.accounts.deposit.load_mut()?;
-    let available = calculate_available_interest(&deposit)?;
+
+    // Check if the pool is paused
+    if pool.is_paused {
+        return Err(ErrorCode::PoolPaused.into());
+    }
+
+    // Get the current timestamp
+    let current_time = Clock::get()?.unix_timestamp;
+
+    // Calculate available interest
+    let available = calculate_available_interest(&deposit, current_time)?;
     require!(amount <= available, ErrorCode::InsufficientFunds);
 
-    // Transfer tokens from vault
+    // Transfer tokens from the pool vault to the user's token account
     let seeds = &[
-        b"vault".as_ref(),
+        VAULT_AUTHORITY.as_bytes(),
         &ctx.accounts.pool.key().to_bytes(),
-        &[ctx.accounts.pool.load()?.vault_bump],
+        &[pool.vault_bump],
     ];
     let signer = [&seeds[..]];
 

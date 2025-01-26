@@ -2,7 +2,8 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 import { BN } from "bn.js";
-import { LoanProgram } from '../target/types/loan_program';
+import { LoanProgram } from '../../target/types/loan_program';
+import { NATIVE_MINT, createMint } from "@solana/spl-token";
 
 export async function createPool(
     program: Program<LoanProgram>,
@@ -16,9 +17,18 @@ export async function createPool(
     confirmOptions?: anchor.web3.ConfirmOptions
 ) {
     try {
+        // Convert agreement hash to Uint8Array
+        const agreementHashArray = new Uint8Array(agreementTemplateHash);
+        if (agreementHashArray.length !== 32) {
+            throw new Error("Agreement hash must be 32 bytes long.");
+        }
+
+        // Create a new token mint
+        const tokenMint = NATIVE_MINT;
+
         // Derive PDAs
         const [poolAddress, poolBump] = PublicKey.findProgramAddressSync(
-            [Buffer.from("pool"), admin.publicKey.toBuffer()],
+            [Buffer.from("pool"), tokenMint.toBuffer(), agreementHashArray],
             program.programId
         );
 
@@ -31,13 +41,6 @@ export async function createPool(
             [Buffer.from("vault_authority"), poolAddress.toBuffer()],
             program.programId
         );
-        const [tokenMint] = PublicKey.findProgramAddressSync(
-            [Buffer.from("pool_mint")],
-            program.programId
-        );
-
-        // Convert agreement hash to Uint8Array
-        const agreementHashArray = new Uint8Array(agreementTemplateHash);
 
         // Set compute budget if needed
         const computeBudgetIx = anchor.web3.ComputeBudgetProgram.setComputeUnitLimit({
@@ -58,11 +61,12 @@ export async function createPool(
                 Array.from(agreementHashArray) // Convert to number array
             )
             .accounts({
+                creator: admin.publicKey,
                 pool: poolAddress,
                 admin: admin.publicKey,
                 poolVault: vaultAddress,
                 vaultAuthority,
-                tokenMint,
+                tokenMint: tokenMint,
                 tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
                 systemProgram: SystemProgram.programId,
             })
@@ -79,6 +83,7 @@ export async function createPool(
             poolAddress,
             vaultAddress,
             vaultAuthority,
+            tokenMint,
             poolBump,
             vaultBump,
         };

@@ -1,6 +1,6 @@
 use anchor_lang::{prelude::*, system_program};
 use anchor_spl::{
-    token::{self, Mint, Token, TokenAccount},
+    token::{Mint, Token, TokenAccount},
     token_2022::{
         self, initialize_account3,
         spl_token_2022::{
@@ -23,6 +23,7 @@ pub struct Pool {
     pub payment_frequency: u64,
     pub is_paused: bool,
     pub deposit_count: u64,
+    pub fee_percent: u64, // Add fee_percent to the Pool struct
     pub vault_bump: u8,
 }
 
@@ -31,6 +32,13 @@ pub const VAULT_AUTHORITY: &str = "vault_authority";
 pub const POOL_VAULT: &str = "vault";
 
 #[derive(Accounts)]
+#[instruction(
+    name: String,
+    interest_rate: u64,
+    loan_term_months: u64,
+    payment_frequency: u64,
+    agreement_template_hash: [u8; 32],
+)]
 pub struct CreatePool<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
@@ -39,7 +47,7 @@ pub struct CreatePool<'info> {
         init,
         payer = admin,
         space = 8 + std::mem::size_of::<Pool>(),
-        seeds = [b"pool", admin.key.as_ref()],
+        seeds = [b"pool", token_mint.key().as_ref(), &agreement_template_hash],
         bump
     )]
     pub pool: AccountLoader<'info, Pool>,
@@ -47,17 +55,7 @@ pub struct CreatePool<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
-    #[account(
-        init,
-        seeds = [
-            POOL_MINT_SEED.as_bytes(),
-        ],
-        bump,
-        mint::decimals = 9,
-        mint::authority = vault_authority,
-        payer = creator,
-        mint::token_program = token_program,
-    )]
+    #[account(mut)]
     pub token_mint: Account<'info, Mint>,
 
     /// CHECK:
@@ -78,6 +76,11 @@ pub struct CreatePool<'info> {
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
+
+pub const MINT_WHITELIST: [&'static str; 2] = [
+    "So11111111111111111111111111111111111111112",  // SOL
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USD
+];
 
 impl<'info> CreatePool<'info> {
     pub fn initialize_vault_context(
@@ -101,10 +104,39 @@ pub fn process_create_pool(
     payment_frequency: u64,
     agreement_template_hash: [u8; 32],
 ) -> Result<()> {
+    // Step 1: Check if the token_mint is in the whitelist
+    let token_mint_key = ctx.accounts.token_mint.key().to_string();
+    if !MINT_WHITELIST.contains(&token_mint_key.as_str()) {
+        return Err(ErrorCode::InvalidTokenMint.into());
+    }
+
+    // Step 2: Assign fee_percent based on the token type
+    let fee_percent = match token_mint_key.as_str() {
+        "So11111111111111111111111111111111111111112" => 5, // SOL: 5% fee
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => 3, // USD: 3% fee
+        _ => unreachable!(), // This case is already handled by the whitelist check
+    };
+
+    // Step 3: Initialize the pool account
     let pool = &mut ctx.accounts.pool.load_init()?;
     pool.admin = *ctx.accounts.admin.key;
     pool.agreement_template_hash = agreement_template_hash;
 
+    // Convert the String to a fixed-size array [u8; 32]
+    let mut name_array = [0u8; 32];
+    let name_bytes = name.as_bytes();
+    let len = name_bytes.len().min(32);
+    name_array[..len].copy_from_slice(&name_bytes[..len]);
+
+    pool.name = name_array;
+    pool.interest_rate = interest_rate;
+    pool.loan_term_months = loan_term_months;
+    pool.payment_frequency = payment_frequency;
+    pool.is_paused = false;
+    pool.deposit_count = 0;
+    pool.fee_percent = fee_percent; // Set the fee_percent
+
+    // Step 4: Create the token account for the pool vault
     create_token_account(
         &ctx.accounts.vault_authority.to_account_info(),
         &ctx.accounts.creator.to_account_info(),
@@ -119,21 +151,13 @@ pub fn process_create_pool(
         ],
     )?;
 
-    // Convert the String to a fixed-size array [u8; 32]
-    let mut name_array = [0u8; 32];
-    let name_bytes = name.as_bytes();
-    let len = name_bytes.len().min(32);
-    name_array[..len].copy_from_slice(&name_bytes[..len]);
-
-    pool.name = name_array;
-    pool.interest_rate = interest_rate;
-    pool.loan_term_months = loan_term_months;
-    pool.payment_frequency = payment_frequency;
-    pool.is_paused = false;
-    pool.deposit_count = 0;
-
-    // token::initialize_account(ctx.accounts.initialize_vault_context())
     Ok(())
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("The provided token mint is not whitelisted.")]
+    InvalidTokenMint,
 }
 
 pub fn create_token_account<'a>(

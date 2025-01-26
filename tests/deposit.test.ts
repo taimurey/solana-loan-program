@@ -1,12 +1,13 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { createPool } from "./instructions/createpool"; // Adjust the import path
+import { deposit } from "./instructions/deposit"; // Adjust the import path
 import { assert } from "chai";
 import { LoanProgram } from '../target/types/loan_program';
 import crypto from 'crypto'; // Import crypto module for hashing
-import { Keypair } from '@solana/web3.js';
+import { Keypair, PublicKey } from '@solana/web3.js';
 
-describe("create pool test", () => {
+describe("create pool and deposit test", () => {
     // Set up the provider
     anchor.setProvider(anchor.AnchorProvider.env());
 
@@ -27,10 +28,8 @@ describe("create pool test", () => {
         return crypto.createHash('sha256').update(agreementString).digest();
     }
 
-    it("should create a pool successfully", async () => {
+    it("should create a pool and deposit funds successfully", async () => {
         try {
-            // Replace with a valid token mint address
-
             // Define agreement terms
             const agreementTerms = {
                 poolName: "MyPool",
@@ -47,7 +46,7 @@ describe("create pool test", () => {
             console.log("Agreement Hash:", agreementHash.toString('hex'));
 
             // Step 1: Create the pool
-            const result = await createPool(
+            const poolResult = await createPool(
                 program,
                 anchor.getProvider().connection,
                 admin,
@@ -59,16 +58,39 @@ describe("create pool test", () => {
                 confirmOptions
             );
 
-            console.log("Transaction signature:", result.tx);
-            console.log("Pool address:", result.poolAddress.toString());
-            console.log("Vault address:", result.vaultAddress.toString());
-            console.log("Vault authority address:", result.vaultAuthority.toString());
+            console.log("Pool creation transaction signature:", poolResult.tx);
+            console.log("Pool address:", poolResult.poolAddress.toString());
+            console.log("Vault address:", poolResult.vaultAddress.toString());
+            console.log("Vault authority address:", poolResult.vaultAuthority.toString());
 
             // Add assertions to verify the pool creation
-            assert(result.tx, "Transaction should have a signature");
-            assert(result.poolAddress, "Pool address should be created");
-            assert(result.vaultAddress, "Vault address should be created");
-            assert(result.vaultAuthority, "Vault authority should be created");
+            assert(poolResult.tx, "Pool creation transaction should have a signature");
+            assert(poolResult.poolAddress, "Pool address should be created");
+            assert(poolResult.vaultAddress, "Vault address should be created");
+            assert(poolResult.vaultAuthority, "Vault authority should be created");
+
+            // Step 2: Deposit funds into the pool
+            const depositResult = await deposit(
+                program,
+                admin, // Use admin as the depositor
+                poolResult.poolAddress, // Use the created pool address
+                poolResult.tokenMint,
+                1000, // Amount to deposit
+                5, // Fee percentage (5%)
+                Array.from(agreementHash), // Use the same agreement hash
+                confirmOptions
+            );
+
+            console.log("Deposit transaction signature:", depositResult.tx);
+            console.log("Deposit address:", depositResult.depositAddress.toString());
+            console.log("User stats address:", depositResult.userStatsAddress.toString());
+            console.log("Vault address:", depositResult.vaultAddress.toString());
+
+            // Add assertions to verify the deposit
+            assert(depositResult.tx, "Deposit transaction should have a signature");
+            assert(depositResult.depositAddress, "Deposit address should be created");
+            assert(depositResult.userStatsAddress, "User stats address should be created");
+            assert(depositResult.vaultAddress, "Vault address should be created");
 
         } catch (error) {
             console.error("Test failed:", error);

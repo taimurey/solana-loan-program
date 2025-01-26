@@ -14,4 +14,8 @@ pub enum ErrorCode {
     InvalidAgreement,
     #[msg("Unauthorized access")]
     Unauthorized,
+    #[msg("Invalid loan term. Loan term must be greater than zero.")]
+    InvalidLoanTerm,
+    #[msg("Invalid payment frequency. Payment frequency must be greater than zero.")]
+    InvalidPaymentFrequency,
 }
