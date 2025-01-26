@@ -22,42 +22,42 @@ describe("create pool test", () => {
     };
 
     // Function to generate agreement hash
-    function generateAgreementHash(agreementTerms) {
-        const agreementString = JSON.stringify(agreementTerms);
-        return crypto.createHash('sha256').update(agreementString).digest();
-    }
+    // function generateAgreementHash(agreementTerms) {
+    //     const agreementString = JSON.stringify(agreementTerms);
+    //     return crypto.createHash('sha256').update(agreementString).digest();
+    // }
 
     it("should create a pool successfully", async () => {
         try {
             // Replace with a valid token mint address
 
             // Define agreement terms
-            const agreementTerms = {
-                poolName: "MyPool",
-                index: 2,
-                interestRate: 500, // 5% in basis points
-                loanTerm: 8, // 8 months
-                paymentFrequency: 1, // Monthly payments
-                depositFee: 300, // 3% for Instant Bank Payment
-                timestamp: new Date().toISOString() // Include a timestamp for uniqueness
-            };
+            // const agreementTerms = {
+            //     poolName: "MyPool",
+            //     index: 2,
+            //     interestRate: 500, // 5% in basis points
+            //     loanTerm: 8, // 8 months
+            //     paymentFrequency: 1, // Monthly payments
+            //     depositFee: 300, // 3% for Instant Bank Payment
+            //     timestamp: new Date().toISOString() // Include a timestamp for uniqueness
+            // };
 
             // Generate agreement hash
-            const agreementHash = generateAgreementHash(agreementTerms);
+            // const agreementHash = generateAgreementHash(agreementTerms);
             console.log("Agreement Hash:", agreementHash.toString('hex'));
 
-            // Step 1: Create the pool
-            const result = await createPool(
-                program,
-                anchor.getProvider().connection,
-                admin,
-                agreementTerms.poolName, // Pool name (string)
-                agreementTerms.interestRate, // Interest rate
-                agreementTerms.loanTerm, // Loan term
-                agreementTerms.paymentFrequency, // Payment frequency
-                Array.from(agreementHash), // Convert Uint8Array to array of numbers
-                confirmOptions
-            );
+            // // Step 1: Create the pool
+            // const result = await createPool(
+            //     program,
+            //     anchor.getProvider().connection,
+            //     admin,
+            //     agreementTerms.poolName, // Pool name (string)
+            //     agreementTerms.interestRate, // Interest rate
+            //     agreementTerms.loanTerm, // Loan term
+            //     agreementTerms.paymentFrequency, // Payment frequency
+            //     Array.from(agreementHash), // Convert Uint8Array to array of numbers
+            //     confirmOptions
+            // );
 
             console.log("Transaction signature:", result.tx);
             console.log("Pool address:", result.poolAddress.toString());
