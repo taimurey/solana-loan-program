@@ -1,0 +1,232 @@
+"use client";
+
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/utils/firebaseconfig"; // <-- Make sure this is your Firestore config file
+import { toast } from "react-toastify";
+interface User {
+  id: string;
+  name: string;
+  balance: number;
+}
+
+interface Account {
+  name: string;
+  type: string;
+  balance: number;
+}
+
+interface Pool {
+  // Firestore document ID
+  docId?: string;
+  poolName: string;
+  pool: string;
+  interestRateBps: string; // or number, depending on how you store it
+  loanTermMonths: string;  // or number
+  paymentFrequency: string; // or number
+  agreementHash: string;
+  timestamp: string;
+
+  poolAddress: string;
+  vaultAddress: string;
+  vaultAuthority: string;
+  tokenMint: string;
+
+  transactionSignature: string;
+
+  creator: string;
+
+  description?: string;
+  contractTerms?: string;
+}
+interface Transaction {
+  docId?: string;            // Firestore document ID
+  poolDocId: string;         // The pool docId to link this transaction to a pool
+  poolName: string;          // For display
+  transactionDate: string;
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  streetLine1: string;
+  streetLine2: string;
+  zipCode: string;
+  city: string;
+  region: string;
+  country: string;
+  contractTerms: string;
+  depositedState: string;
+  amount: string;
+  tokenAddress: string;
+}
+
+
+interface GlobalContextType {
+  user: User | null;
+  accounts: Account[];
+  isLoading: boolean;
+  logout: () => void;
+  setAccounts: (accounts: Account[]) => void;
+  setPools: (pools: Pool[]) => void;
+  setAllTransactions: (transactions: Transaction[]) => void;
+  allTransactions: Transaction[];
+  pools: Pool[];
+}
+
+const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
+
+interface GlobalProviderProps {
+  children: ReactNode;
+}
+
+export function GlobalProvider({ children }: GlobalProviderProps) {
+  const { publicKey } = useWallet();
+  const [user, setUser] = useState<User | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [pools, setPools] = useState<Pool[]>([]);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    // If we have a connected wallet, set user info and fetch data
+    if (publicKey) {
+      // Example user
+      setUser({ id: publicKey.toBase58(), name: "John Doe", balance: 2500 });
+
+      // Example accounts
+      setAccounts([
+        { name: "Main Account", type: "Checking", balance: 1500 },
+        { name: "Savings Account", type: "Savings", balance: 1000 },
+      ]);
+
+      // Fetch the pools from Firestore for this user (or for all, depending on your logic)
+      fetchPools(publicKey.toBase58());
+      fetchAllTransactions();
+
+    } else {
+      // No wallet connected -> clear user/pools
+      setUser(null);
+      setAccounts([]);
+      setPools([]);
+    }
+    setIsLoading(false);
+  }, [publicKey]);
+
+  // Helper: fetch pools from Firestore
+  const fetchPools = async (creatorPubkey: string) => {
+    try {
+      // If you only want to load the pools created by this user:
+      const q = query(collection(db, "pools"), where("creator", "==", creatorPubkey));
+
+      // If you want all pools, just do: `const q = collection(db, "pools");`
+      const querySnapshot = await getDocs(q);
+
+      const fetchedPools: Pool[] = [];
+      querySnapshot.forEach((docSnapshot) => {
+        const data = docSnapshot.data();
+
+        // Convert Firestore doc to our Pool interface
+        const poolItem: Pool = {
+          docId: docSnapshot.id,
+          poolName: data.poolName,
+          interestRateBps: data.interestRateBps,
+          loanTermMonths: data.loanTermMonths,
+          paymentFrequency: data.paymentFrequency,
+          agreementHash: data.agreementHash,
+          timestamp: data.timestamp,
+          poolAddress: data.poolAddress,
+          vaultAddress: data.vaultAddress,
+          vaultAuthority: data.vaultAuthority,
+          tokenMint: data.tokenMint,
+          transactionSignature: data.transactionSignature,
+          creator: data.creator,
+          pool: ""
+        };
+
+        fetchedPools.push(poolItem);
+      });
+
+      setPools(fetchedPools);
+    } catch (error) {
+      console.error("Error fetching pools:", error);
+      toast.error("Failed to fetch pools from Firestore");
+    }
+  };
+
+  const fetchAllTransactions = async () => {
+    try {
+      // If you want all transactions, do this:
+      const q = collection(db, "transactions");
+      
+      // If you want only transactions for your user, 
+      // you'd need a field like `creator` in the transaction doc 
+      // or something else to filter. For example:
+      // const q = query(collection(db, "transactions"), where("creator", "==", publicKey.toBase58()))
+
+      const querySnapshot = await getDocs(q);
+      const fetchedTransactions: Transaction[] = [];
+
+      querySnapshot.forEach((docSnapshot) => {
+        const data = docSnapshot.data();
+        // Convert Firestore doc to Transaction interface
+        const tx: Transaction = {
+          docId: docSnapshot.id,
+          poolDocId: data.poolDocId || "",
+          poolName: data.poolName || "",
+          transactionDate: data.transactionDate || "",
+          fullName: data.fullName || "",
+          email: data.email || "",
+          phoneNumber: data.phoneNumber || "",
+          streetLine1: data.streetLine1 || "",
+          streetLine2: data.streetLine2 || "",
+          zipCode: data.zipCode || "",
+          city: data.city || "",
+          region: data.region || "",
+          country: data.country || "",
+          contractTerms: data.contractTerms || "",
+          depositedState: data.depositedState || "",
+          amount: data.amount || "",
+          tokenAddress: data.tokenAddress || "",
+        };
+        fetchedTransactions.push(tx);
+      });
+
+      setAllTransactions(fetchedTransactions);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      toast.error("Failed to fetch transactions from Firestore");
+    }
+  };
+
+
+  // ✅ Logout function to clear state
+  const logout = () => {
+    setUser(null);
+    setAccounts([]);
+    setPools([]);
+    setAllTransactions([]);
+  };
+
+  // ✅ Use useMemo to optimize context values
+  const value = useMemo(() => ({
+    user,
+    accounts,
+    isLoading,
+    logout,
+    setAccounts,
+    setPools,
+    setAllTransactions,
+    allTransactions,
+    pools,
+  }), [user, accounts, isLoading, allTransactions, pools]);
+
+  return <GlobalContext.Provider value={value}>{children}</GlobalContext.Provider>;
+}
+
+export function useGlobalContext(): GlobalContextType {
+  const context = useContext(GlobalContext);
+  if (!context) {
+    throw new Error("useGlobalContext must be used within a GlobalProvider");
+  }
+  return context;
+}
