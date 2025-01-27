@@ -19,6 +19,7 @@ import { buildVersionedTransaction } from "@/components/instructions/buildTransa
 import { SendTransaction } from "@/components/instructions/transaction-send";
 import { doc, updateDoc, addDoc, collection, deleteDoc } from "firebase/firestore";
 import { db } from "@/utils/firebaseconfig"; // <-- import the Firestore instance from your firebase.ts
+import { PublicKey } from "@solana/web3.js"; // Ensure you import this if not already included
 
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "password123";
@@ -27,16 +28,17 @@ interface Pool {
     docId?: string;
     poolName: string;
     pool: string;
-    interestRateBps: string; // or number, depending on how you store it
-    loanTermMonths: string;  // or number
-    paymentFrequency: string; // or number
+    interestRateBps: number; // or number, depending on how you store it
+    loanTermMonths: number;  // or number
+    paymentFrequency: number; // or number
     agreementHash: string;
     timestamp: string;
+    index: number;
 
-    poolAddress: string;
-    vaultAddress: string;
-    vaultAuthority: string;
-    tokenMint: string;
+    poolAddress: PublicKey | null;
+    vaultAddress: PublicKey | null;
+    vaultAuthority: PublicKey | null;
+    tokenMint: PublicKey | null;
 
     transactionSignature: string;
 
@@ -73,16 +75,27 @@ interface InputFieldProps {
     name: string;
     type: string;
     placeholder: string;
-    value: string;
+    value: string | number;
     onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+    required?: boolean;
 }
 
-const InputField: React.FC<InputFieldProps> = ({ label, name, type, placeholder, value, onChange }) => (
+const InputField: React.FC<InputFieldProps> = ({ label, name, type, placeholder, value, onChange, required }) => (
     <div className="mb-2">
-        <label className="block text-gray-700 font-semibold mb-1" htmlFor={name}>{label}</label>
-        <input id={name} name={name} type={type} placeholder={placeholder} value={value} onChange={onChange} className="w-full p-2 border rounded" />
+        <label className="block text-gray-700 font-semibold mb-1" htmlFor={name}>{label}{required && <span className="text-red-500"> *</span>}</label>
+        <input
+            id={name}
+            name={name}
+            type={type}
+            placeholder={placeholder}
+            value={value}
+            onChange={onChange}
+            className="w-full p-2 border rounded"
+            required={required}
+        />
     </div>
 );
+
 
 const Page = () => {
     const connection = new Connection("https://api.devnet.solana.com");
@@ -102,6 +115,7 @@ const Page = () => {
 
 
     const handleLogin = () => {
+        console.log("Logging in with", username, password);
         if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
             setIsAuthenticated(true);
             toast.success("Login successful!");
@@ -112,16 +126,17 @@ const Page = () => {
 
     const [newPool, setNewPool] = useState<Pool>({
         poolName: "",
+        index: 0,
         pool: "0.001",
         description: "",
-        interestRateBps: "0.00",
-        loanTermMonths: "0",
-        paymentFrequency: "0",
-        poolAddress: "",
+        interestRateBps: 0.00,
+        loanTermMonths: 0,
+        paymentFrequency: 0,
+        poolAddress: null,
         contractTerms: "",
-        vaultAddress: "",
-        vaultAuthority: "",
-        tokenMint: "",
+        vaultAddress: null,
+        vaultAuthority: null,
+        tokenMint: null,
         agreementHash: "",
         timestamp: new Date().toISOString(),
         transactionSignature: "",
@@ -162,7 +177,14 @@ const Page = () => {
         setTransactionDetails((prev) => ({ ...prev, [name]: value }));
     };
 
-    const handleCreatePool = async () => {
+    const handleCreatePool = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newPool.poolName || !newPool.description || !newPool.index || !newPool.interestRateBps ||
+            !newPool.loanTermMonths || !newPool.paymentFrequency || !newPool.poolAddress ||
+            !newPool.contractTerms) {
+            toast.error("All fields are required");
+            return;
+        }
         if (!wallet?.publicKey) {
             toast.error("Please connect your wallet");
             return;
@@ -189,35 +211,38 @@ const Page = () => {
 
             // Define agreement terms
             const agreementTerms = {
-                poolName: "MyPool",
-                index: 2,
-                interestRate: 500, // 5% in basis points
-                loanTerm: 8, // 8 months
-                paymentFrequency: 1, // Monthly payments
+                poolName: newPool.poolName,
+                index: newPool.index,
+                interestRate: newPool.interestRateBps, // 5% in basis points
+                loanTerm: newPool.loanTermMonths, // 8 months
+                paymentFrequency: newPool.paymentFrequency, // Monthly payments
                 depositFee: 300, // 3% for Instant Bank Payment
                 timestamp: new Date().toISOString() // Include a timestamp for uniqueness
             };
 
             const agreementHash = generateAgreementHash(agreementTerms);
             // Step 1: Create the pool
-            const instruction = await createPool(
-                program,
-                connection,
-                wallet, // admin (Keypair)
-                agreementTerms.poolName, // Pool name (string)
-                agreementTerms.interestRate, // Interest rate
-                agreementTerms.loanTerm, // Loan term
-                agreementTerms.paymentFrequency, // Payment frequency
-                Array.from(agreementHash), // Convert Uint8Array to array of numbers
-                confirmOptions // Optional argument
-            );
+
+            const { instruction, poolAddress, vaultAddress, vaultAuthority, tokenMint } =
+                await createPool(
+                    program,
+                    connection,
+                    wallet, // Admin wallet
+                    agreementTerms.poolName,
+                    agreementTerms.interestRate,
+                    agreementTerms.loanTerm,
+                    agreementTerms.paymentFrequency,
+                    Array.from(agreementHash), // Agreement hash as array
+                    confirmOptions
+                );
+
 
             // build dummy instructions here laater will be replaced with actual instructions
 
 
 
             const versionedtransaction = await buildVersionedTransaction({
-                instructions: [instruction.instruction],
+                instructions: [instruction],
                 wallet: walletContext,
                 connection
             })
@@ -245,36 +270,20 @@ const Page = () => {
 
 
 
-            // // creating dummy instructions here laater will be replaced with actual instructions
-            // const instruction = {
-            //     poolAddress: "11111111111111111111111111111111",
-            //     vaultAddress: "22222222222222222222222222222222",
-            //     vaultAuthority: "33333333333333333333333333333333",
-            //     tokenMint: "So11111111111111111111111111111111111111112", // another real example if you want
-            //     instruction: {
-            //         keys: [],
-            //         programId: "11111111111111111111111111111111",
-            //         data: Buffer.from("data"),
-            //     },
-            // };
-
-
-            // // creating a dummy signature for now to make database work
-            // const signature = "dummySignature";
             const poolData = {
                 // user inputs
                 poolName: newPool.poolName,
                 interestRateBps: newPool.interestRateBps,
                 loanTermMonths: newPool.loanTermMonths,
                 paymentFrequency: newPool.paymentFrequency,
-                agreementHash: "agreementHash", // replaced with actual hash
+                agreementHash: Buffer.from(agreementHash).toString('base64'), // replaced with actual hash
                 timestamp: new Date().toISOString(),
 
                 // on-chain addresses
-                poolAddress: 'instruction.poolAddress',   // if you return it from createPool
-                vaultAddress: 'instruction.vaultAddress', // if you return it
-                vaultAuthority: ' instruction.vaultAuthority', // if you return it
-                tokenMint: 'instruction.tokenMint',       // if you return it
+                poolAddress: poolAddress.toBase58(),
+                vaultAddress: vaultAddress.toBase58(),
+                vaultAuthority: vaultAuthority.toBase58(),
+                tokenMint: tokenMint.toBase58(),
 
                 // transaction
                 transactionSignature: signature,
@@ -327,18 +336,19 @@ const Page = () => {
                 poolName: "",
                 pool: "0.001",
                 description: "",
-                interestRateBps: "0.00",
-                loanTermMonths: "0",
-                paymentFrequency: "0",
-                poolAddress: "",
+                interestRateBps: 0.00,
+                loanTermMonths: 0,
+                paymentFrequency: 0,
+                poolAddress: null,
                 contractTerms: "",
-                vaultAddress: "",
-                vaultAuthority: "",
-                tokenMint: "",
+                vaultAddress: null,
+                vaultAuthority: null,
+                tokenMint: null,
                 agreementHash: "",
                 timestamp: new Date().toISOString(),
                 transactionSignature: "",
                 creator: "",
+                index: 0,
 
             });
 
@@ -547,13 +557,13 @@ const Page = () => {
         if (filterCriteria === "name") {
             return pool.poolName.toLowerCase().includes(searchTerm.toLowerCase());
         } else if (filterCriteria === "interestRate") {
-            return pool.interestRateBps.includes(searchTerm);
+            return pool.interestRateBps.toString().includes(searchTerm);
         } else if (filterCriteria === "loanTerm") {
-            return pool.loanTermMonths.includes(searchTerm);
+            return pool.loanTermMonths.toString().includes(searchTerm);
         } else if (filterCriteria === "paymentFrequency") {
-            return pool.paymentFrequency.includes(searchTerm);
+            return pool.paymentFrequency.toString().includes(searchTerm);
         } else if (filterCriteria === "address") {
-            return pool.poolAddress.toLowerCase().includes(searchTerm.toLowerCase());
+            return pool.poolAddress?.toBase58().toLowerCase().includes(searchTerm.toLowerCase());
         }
         return true;
     });
@@ -629,7 +639,6 @@ const Page = () => {
                         <thead className="bg-gray-200">
                             <tr>
                                 <th className="p-3 text-left">Name</th>
-                                <th className="p-3 text-left">Pool</th>
                                 <th className="p-3 text-left">Interest Rate</th>
                                 <th className="p-3 text-left">Loan Term</th>
                                 <th className="p-3 text-left">Payment Frequency</th>
@@ -641,11 +650,17 @@ const Page = () => {
                             {filteredPools.map((pool, index) => (
                                 <tr key={index} className="border-t">
                                     <td className="p-3">{pool.poolName}</td>
-                                    <td className="p-3">{pool.pool}</td>
                                     <td className="p-3">{pool.interestRateBps}%</td>
                                     <td className="p-3">{pool.loanTermMonths} Months</td>
                                     <td className="p-3">{pool.paymentFrequency} Times</td>
-                                    <td className="p-3">{pool.poolAddress}</td>
+                                    <td className="p-3">
+                                        {pool.poolAddress instanceof PublicKey
+                                            ? pool.poolAddress.toBase58()
+                                            : pool.poolAddress ? pool.poolAddress : "N/A"}
+                                    </td>
+
+
+
 
                                     <td className="p-3 relative">
                                         <div className="relative group inline-block">
@@ -673,15 +688,26 @@ const Page = () => {
                                 <h2 className="text-xl font-semibold ">New Pool</h2>
                                 <p className="text-sm py-1  text-black/70">Create a new pool to organize your Transactions</p>
                             </div>
-                            <InputField label="Name" name="poolName" type="text" placeholder="e.g. Invest to Business" value={newPool.poolName || ""} onChange={handleInputChange} />
-                            <InputField label="Description" name="description" type="text" placeholder="e.g. This pool will get profit from startups" value={newPool.description || ""} onChange={handleInputChange} />
-                            <InputField label="Interest Rate" name="interestRateBps" type="number" placeholder="Interest Rate" value={newPool.interestRateBps || ""} onChange={handleInputChange} />
-                            <InputField label="Loan Term" name="loanTermMonths" type="number" placeholder="Loan Term" value={newPool.loanTermMonths || ""} onChange={handleInputChange} />
-                            <InputField label="Payment Frequency" name="paymentFrequency" type="number" placeholder="Payment Frequency" value={newPool.paymentFrequency || ""} onChange={handleInputChange} />
-                            <InputField label="Address" name="poolAddress" type="text" placeholder="Address" value={newPool.poolAddress || ""} onChange={handleInputChange} />
-                            <InputField label="Contract Terms" name="contractTerms" type="text" placeholder="Contract Terms" value={newPool.contractTerms || ""} onChange={handleInputChange} />
-                            <button onClick={handleCreatePool} className="w-full bg-blue-600 text-white py-2 rounded">Create Pool</button>
+                            <form onSubmit={handleCreatePool}>
 
+                                <InputField label="Name" name="poolName" type="text" placeholder="e.g. Invest to Business" value={newPool.poolName || ""} onChange={handleInputChange} />
+                                <InputField label="Description" name="description" type="text" placeholder="e.g. This pool will get profit from startups" value={newPool.description || ""} onChange={handleInputChange} />
+                                <InputField label="Index" name="index" type="number" placeholder="Pool Index" value={newPool.index} onChange={handleInputChange} />
+                                <InputField label="Interest Rate" name="interestRateBps" type="number" placeholder="Interest Rate" value={newPool.interestRateBps || ""} onChange={handleInputChange} />
+                                <InputField label="Loan Term" name="loanTermMonths" type="number" placeholder="Loan Term" value={newPool.loanTermMonths || ""} onChange={handleInputChange} />
+                                <InputField label="Payment Frequency" name="paymentFrequency" type="number" placeholder="Payment Frequency" value={newPool.paymentFrequency || ""} onChange={handleInputChange} />
+                                <InputField
+                                    label="Address"
+                                    name="poolAddress"
+                                    type="text"
+                                    placeholder="Address"
+                                    value={typeof newPool.poolAddress === "string" ? newPool.poolAddress : ""}
+                                    onChange={handleInputChange}
+                                />
+
+                                <InputField label="Contract Terms" name="contractTerms" type="text" placeholder="Contract Terms" value={newPool.contractTerms || ""} onChange={handleInputChange} />
+                                <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded">{isEditing ? "Update Pool" : "Create Pool" } </button>
+                            </form>
                         </Drawer>
                     )}
 

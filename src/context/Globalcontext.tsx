@@ -5,6 +5,8 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/utils/firebaseconfig"; // <-- Make sure this is your Firestore config file
 import { toast } from "react-toastify";
+import { PublicKey } from "@solana/web3.js"; // Ensure you import this if not already included
+
 interface User {
   id: string;
   name: string;
@@ -22,16 +24,17 @@ interface Pool {
   docId?: string;
   poolName: string;
   pool: string;
-  interestRateBps: string; // or number, depending on how you store it
-  loanTermMonths: string;  // or number
-  paymentFrequency: string; // or number
+  interestRateBps: number; // or number, depending on how you store it
+  loanTermMonths: number;  // or number
+  paymentFrequency: number; // or number
   agreementHash: string;
   timestamp: string;
+  index: number;
 
-  poolAddress: string;
-  vaultAddress: string;
-  vaultAuthority: string;
-  tokenMint: string;
+  poolAddress: PublicKey | null;
+  vaultAddress: PublicKey | null;
+  vaultAuthority: PublicKey | null;
+  tokenMint: PublicKey | null;
 
   transactionSignature: string;
 
@@ -112,40 +115,44 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     setIsLoading(false);
   }, [publicKey]);
 
-  // Helper: fetch pools from Firestore
-  const fetchPools = async (creatorPubkey: string) => {
-    try {
-      // If you only want to load the pools created by this user:
-      const q = query(collection(db, "pools"), where("creator", "==", creatorPubkey));
 
-      // If you want all pools, just do: `const q = collection(db, "pools");`
+  const fetchPools = async (creatorPubkey?: string) => {
+    try {
+      // Define query: filter by creatorPubkey if provided, otherwise fetch all pools
+      const q = creatorPubkey
+        ? query(collection(db, "pools"), where("creator", "==", creatorPubkey))
+        : collection(db, "pools");
+
+      // Fetch documents from Firestore
       const querySnapshot = await getDocs(q);
 
       const fetchedPools: Pool[] = [];
       querySnapshot.forEach((docSnapshot) => {
         const data = docSnapshot.data();
 
-        // Convert Firestore doc to our Pool interface
+        // Safely convert Firestore data into a Pool object
         const poolItem: Pool = {
           docId: docSnapshot.id,
-          poolName: data.poolName,
-          interestRateBps: data.interestRateBps,
-          loanTermMonths: data.loanTermMonths,
-          paymentFrequency: data.paymentFrequency,
-          agreementHash: data.agreementHash,
-          timestamp: data.timestamp,
-          poolAddress: data.poolAddress,
-          vaultAddress: data.vaultAddress,
-          vaultAuthority: data.vaultAuthority,
-          tokenMint: data.tokenMint,
-          transactionSignature: data.transactionSignature,
-          creator: data.creator,
-          pool: ""
+          poolName: data.poolName || "Unnamed Pool",
+          interestRateBps: data.interestRateBps || 0,
+          loanTermMonths: data.loanTermMonths || 0,
+          paymentFrequency: data.paymentFrequency || 0,
+          agreementHash: data.agreementHash || "",
+          timestamp: data.timestamp || new Date().toISOString(),
+          poolAddress: data.poolAddress ? new PublicKey(data.poolAddress) : null,
+          vaultAddress: data.vaultAddress ? new PublicKey(data.vaultAddress) : null,
+          vaultAuthority: data.vaultAuthority ? new PublicKey(data.vaultAuthority) : null,
+          tokenMint: data.tokenMint ? new PublicKey(data.tokenMint) : null,
+          transactionSignature: data.transactionSignature || "",
+          creator: data.creator || "",
+          pool: data.pool || "",
+          index: data.index || 0,
         };
 
         fetchedPools.push(poolItem);
       });
 
+      // Update the state with fetched pools
       setPools(fetchedPools);
     } catch (error) {
       console.error("Error fetching pools:", error);
@@ -153,11 +160,12 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     }
   };
 
+
   const fetchAllTransactions = async () => {
     try {
       // If you want all transactions, do this:
       const q = collection(db, "transactions");
-      
+
       // If you want only transactions for your user, 
       // you'd need a field like `creator` in the transaction doc 
       // or something else to filter. For example:

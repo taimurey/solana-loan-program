@@ -53,7 +53,7 @@ export async function createPool(
         });
 
         // Build and send transaction
-        const instruction = await program.methods
+        const createPoolIx = await program.methods
             .createPool(
                 name, // Pass name as a string
                 new BN(interestRate), // Convert to BN
@@ -74,9 +74,13 @@ export async function createPool(
             .preInstructions([computeBudgetIx, priorityFeeIx])
             .instruction();
 
-        return {
-            instruction,
-        };
+            return {
+                instruction: createPoolIx,
+                poolAddress,
+                vaultAddress,
+                vaultAuthority,
+                tokenMint,
+            };
     } catch (error) {
         console.error("Error creating pool:", error);
         throw error;
