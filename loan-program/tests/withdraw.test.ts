@@ -4,7 +4,7 @@ import { createPool } from "./instructions/createpool"; // Adjust the import pat
 import { deposit } from "./instructions/deposit"; // Adjust the import path
 import { withdraw } from "./instructions/withdraw"; // Adjust the import path
 import { assert } from "chai";
-import { LoanProgram } from '../target/types/loan_program';
+import { LoanProgram } from '../../src/components/instructions/loan_program';
 import crypto from 'crypto'; // Import crypto module for hashing
 import { Keypair, PublicKey } from '@solana/web3.js';
 

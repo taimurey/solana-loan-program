@@ -2,7 +2,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 import { BN } from "bn.js";
-import { LoanProgram } from '../../target/types/loan_program';
+import { LoanProgram } from '../../../src/components/instructions/loan_program';
 import { NATIVE_MINT, createMint } from "@solana/spl-token";
 
 export async function createPool(
