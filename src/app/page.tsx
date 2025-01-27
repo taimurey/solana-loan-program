@@ -20,6 +20,7 @@ import { SendTransaction } from "@/components/instructions/transaction-send";
 import { doc, updateDoc, addDoc, collection, deleteDoc } from "firebase/firestore";
 import { db } from "@/utils/firebaseconfig"; // <-- import the Firestore instance from your firebase.ts
 import { PublicKey } from "@solana/web3.js"; // Ensure you import this if not already included
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "password123";
@@ -598,8 +599,18 @@ const Page = () => {
         );
     }
 
+
+    const connectWallet = async () => {
+        try {
+          const response = await window.solana.connect();
+          console.log('Wallet connected:', response.publicKey.toString());
+          // Now you can set the user state with the wallet info
+        } catch (err) {
+          console.error('Failed to connect wallet', err);
+        }
+      };
     return (
-        user && (
+        user ? (
             <SecondaryLayout title={`Welcome back, ${user.name}`} description="This is your Financial Administrator overview portal.">
                 <div className="bg-white rounded-2xl p-6 shadow-md">
                     <div className="flex justify-between items-center mb-4">
@@ -704,9 +715,8 @@ const Page = () => {
                                     value={typeof newPool.poolAddress === "string" ? newPool.poolAddress : ""}
                                     onChange={handleInputChange}
                                 />
-
                                 <InputField label="Contract Terms" name="contractTerms" type="text" placeholder="Contract Terms" value={newPool.contractTerms || ""} onChange={handleInputChange} />
-                                <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded">{isEditing ? "Update Pool" : "Create Pool" } </button>
+                                <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded">{isEditing ? "Update Pool" : "Create Pool"} </button>
                             </form>
                         </Drawer>
                     )}
@@ -950,6 +960,11 @@ const Page = () => {
                 </div>
             </SecondaryLayout>
         )
+            : (
+                <div className="flex justify-center items-center h-screen bg-gray-100">
+                    <WalletMultiButton className="bg-[#2463eb] px-3 py-2 rounded-xl" />
+                </div>
+            )
     );
 };
 
