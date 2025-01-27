@@ -3,14 +3,27 @@
 import React, { useState, ChangeEvent } from "react";
 import { useGlobalContext } from "@/context/Globalcontext";
 import SecondaryLayout from "@/components/SecondaryLayout";
-import { doc, updateDoc, addDoc, collection, deleteDoc } from "firebase/firestore";
-
+import { doc, updateDoc, addDoc, collection, deleteDoc, getDoc } from "firebase/firestore";
+import { useAnchorWallet, useWallet } from "@solana/wallet-adapter-react";
 import Drawer from "@/components/Drawer";
 import { FaEllipsisH, FaEdit, FaTrash, FaPlay } from "react-icons/fa";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { db } from "@/utils/firebaseconfig"; // <-- import the Firestore instance from your firebase.ts
+import { Connection } from "@solana/web3.js";
+import * as anchor from '@coral-xyz/anchor';
+import { IDL, LoanProgram } from "@/components/instructions/loan_program";
+import BN from "bn.js";
+import { LoanProgramID } from "@/components/instructions/Config";
 
+import {
+  PublicKey,
+  Transaction as SolanaTransaction,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+} from "@solana/web3.js";
+import { AnchorProvider } from "@coral-xyz/anchor";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 interface Transaction {
   docId?: string;            // Firestore document ID
@@ -48,7 +61,13 @@ const InputField: React.FC<InputFieldProps> = ({ label, name, type, placeholder,
   </div>
 );
 const Page = () => {
+  const connection = new Connection("https://api.devnet.solana.com");
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
   const { user, allTransactions, setAllTransactions } = useGlobalContext();
+  const walletContext = useWallet();
+  const wallet = useAnchorWallet();
+
 
 
   const [menuOpenIndex, setMenuOpenIndex] = useState<number | null>(null);
@@ -77,50 +96,108 @@ const Page = () => {
     poolDocId: "",
 
   });
+
+
   const handleDepositViaSolana = async () => {
-    if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
-      toast.error("Please fill in all fields.");
-      return;
-    }
-
-    if (tobeDepositedTransaction) {
-      // Create an updated transaction in local state
-      const updatedTransaction = {
-        ...tobeDepositedTransaction,
-        amount: transactionDetails.amount,
-        depositedState: "deposited",
-      };
-
-      // Update the global state
-      const updatedTransactions = allTransactions.map((t) =>
-        t.docId === tobeDepositedTransaction.docId ? updatedTransaction : t
-      );
-      setAllTransactions(updatedTransactions);
-
-      // 1) Update Firestore if we have a docId
-      if (tobeDepositedTransaction.docId) {
-        try {
-          await updateDoc(
-            doc(db, "transactions", tobeDepositedTransaction.docId),
-            {
-              amount: transactionDetails.amount,
-              depositedState: "deposited",
-            }
-          );
-        } catch (error) {
-          console.error("Error updating transaction in Firestore:", error);
-          toast.error("Could not update transaction in Firestore");
-        }
+    try {
+      if (!walletContext?.publicKey || !walletContext.sendTransaction) {
+        toast.error("Wallet not connected or cannot sign transactions");
+        return;
       }
 
-      // Clear the active transaction
-      setTobeDepositedTransaction(null);
+      if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
+        toast.error("Please fill in all fields (amount, address).");
+        return;
+      }
+
+      const solAmount = parseFloat(transactionDetails.amount);
+      if (isNaN(solAmount) || solAmount <= 0) {
+        toast.error("Invalid SOL amount.");
+        return;
+      }
+
+      // Convert SOL to lamports
+      const lamports = Math.round(solAmount * LAMPORTS_PER_SOL);
+
+      // Parse the destination address
+      const toPubkey = new PublicKey(transactionDetails.tokenAddress.trim());
+
+      // Build transfer instruction
+      const transferIx = SystemProgram.transfer({
+        fromPubkey: walletContext.publicKey,
+        toPubkey,
+        lamports,
+      });
+
+      // Create a transaction and add the instruction
+      const transaction = new SolanaTransaction().add(transferIx);
+
+      // Send the transaction
+      const signature = await walletContext.sendTransaction(transaction, connection);
+      await connection.confirmTransaction(signature, "confirmed");
+
+      if (tobeDepositedTransaction && tobeDepositedTransaction.docId) {
+        const docRef = doc(db, "transactions", tobeDepositedTransaction.docId);
+        const existingSnap = await getDoc(docRef);
+
+        if (!existingSnap.exists()) {
+          toast.error("Transaction doc does not exist in Firestore!");
+          return;
+        }
+
+        // Get old amount from Firestore
+        const existingData = existingSnap.data();
+        const oldAmount = parseFloat(existingData.amount || "0") || 0;
+
+        // Add the new deposit
+        const newTotal = oldAmount + solAmount;
+        // Round to 6 decimal places
+        const finalRounded = parseFloat(newTotal.toFixed(6));
+
+        const updatedTransaction = {
+          ...tobeDepositedTransaction,
+          amount: finalRounded.toString(),
+          depositedState: "deposited",
+          solanaTxSignature: signature,
+        };
+
+        // Update Firestore
+        await updateDoc(docRef, {
+          amount: finalRounded.toString(),
+          depositedState: "deposited",
+          solanaTxSignature: signature,
+        });
+
+        // Update local state array
+        const updatedTransactions = allTransactions.map((tx) =>
+          tx.docId === tobeDepositedTransaction.docId ? updatedTransaction : tx
+        );
+        setAllTransactions(updatedTransactions);
+
+        // Clear
+        setTobeDepositedTransaction(null);
+      }
+
+      setIsDepositDrawerOpen(false);
+      toast.success(
+        <div>
+          Deposit via Solana successful!{" "}
+          <a
+            href={`https://solscan.io/tx/${signature}?cluster=devnet`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ textDecoration: "underline" }}
+          >
+            View on Solscan
+          </a>
+        </div>
+      );
+
+    } catch (error: any) {
+      console.error("Error depositing via Solana:", error);
+      toast.error(`Deposit failed: ${error.message || error.toString()}`);
     }
-
-    setIsDepositDrawerOpen(false);
-    toast.success("Deposit via Solana successful!");
   };
-
 
   const handleDepositViaStripe = async (amount: number) => {
     if (tobeDepositedTransaction) {
@@ -141,7 +218,7 @@ const Page = () => {
       if (tobeDepositedTransaction.docId) {
         try {
           await updateDoc(doc(db, "transactions", tobeDepositedTransaction.docId), {
-            amount: amount.toString(),
+            amount: tobeDepositedTransaction.amount,// will be replaced when strip starts working, added same, just not to overwrite solana added amount
             depositedState: "deposited",
           });
         } catch (error) {
@@ -157,6 +234,8 @@ const Page = () => {
     setIsDepositDrawerOpen(false);
     toast.success(`Deposit of $${amount} via Stripe successful!`);
   };
+
+
 
   const handleTransactionInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -186,11 +265,61 @@ const Page = () => {
   };
 
 
-  const handleWithDraw = (index: number) => {
-    setMenuOpenIndex(null);
-    toast.success("Transaction withdrawed succesfully! ");
-  };
+  const handleWithDraw = async () => {
+      if (!wallet?.publicKey) {
+        toast.error("Wallet not connected!");
+        return;
+      }
+      toast.info("Withdraw functioanlity is not implemented yet");
+      // try {
+      //   // Define poolPublicKey
+      //   const poolPublicKey = new PublicKey("YourPoolPublicKeyHere");
+
+      //   // Define poolVault
+      //   const poolVault = new PublicKey("YourPoolVaultPublicKeyHere");
+  
+      //   // 1) Build your program
+      //   const provider = new AnchorProvider(
+      //     connection,
+      //     wallet,
+      //     AnchorProvider.defaultOptions()
+      //   );
+      //   const program = new anchor.Program<LoanProgram>(IDL, LoanProgramID, provider);
+  
+      //   // 2) Convert user input to BN lamports
+      //   const lamports = new BN(Math.round(parseFloat(withdrawAmount) * 1_000_000_000));
+  
+      //   // 3) Call your instruction
+      //   const signature = await program.methods
+      //     .withdraw(lamports)
+      //     .accounts({
+      //       pool: poolPublicKey,
+      //       user: wallet.publicKey,
+      //       poolVault,
+      //       userTokenAccount: new PublicKey("YourUserTokenAccountPublicKeyHere"),
+      //       tokenProgram: TOKEN_PROGRAM_ID,
+      //     })
+      //     .rpc();
+  
+      //   // 4) Wait or confirm. Then update Firestore if desired
+      //   toast.success(`Withdraw transaction signature: ${signature}`);
+      //   // Possibly store that the user withdrew `withdrawAmount` from Firestore
+  
+      //   setIsWithdrawOpen(false);
+  
+      // } catch (error) {
+      //   console.error("Withdraw failed:", error);
+      //   if (error instanceof Error) {
+      //     toast.error(`Withdraw failed: ${error.message}`);
+      //   } else {
+      //     toast.error("Withdraw failed: An unknown error occurred.");
+      //   }
+      // }
+    };
+
+
   const handleCloseDepositDrawer = () => {
+
     setIsDepositDrawerOpen(false);
     setTobeDepositedTransaction(null); // Clear the active transaction
   };
@@ -231,8 +360,8 @@ const Page = () => {
                         <div className="absolute right-4 mt-2 w-40 bg-white shadow-lg rounded-lg z-50  transition-opacity duration-200">
                           {/* <button onClick={() => handleEdit(index)} className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-200 w-full"><FaEdit className="mx-2" /> Edit</button> */}
                           <button onClick={() => handleDelete(transaction.docId)} className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-200 w-full"><FaTrash className="mx-2" /> Delete</button>
-                          <button onClick={() => handleWithDraw(index)} className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-200 w-full"><FaPlay className="mx-2" />WithDraw</button>
-                          <button onClick={() => { setIsDepositDrawerOpen(true); setTobeDepositedTransaction(transaction); setMenuOpenIndex(null) }} className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-200 w-full"><FaPlay className="mx-2" />Deposit</button>
+                          <button onClick={() => setIsWithdrawOpen(true)} className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-200 w-full"><FaPlay className="mx-2" />WithDraw</button>
+                          <button onClick={() => { setIsDepositDrawerOpen(true); setTobeDepositedTransaction(transaction); setMenuOpenIndex(null); setTransactionDetails(transaction) }} className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-200 w-full"><FaPlay className="mx-2" />Deposit</button>
                         </div>
                       )}
                     </div>
@@ -359,6 +488,22 @@ const Page = () => {
                   </div>
                 </>
               )}
+            </Drawer>
+          )}
+
+          {isWithdrawOpen && (
+            <Drawer onClose={() => setIsWithdrawOpen(false)}>
+              <div className="mb-2">
+                <h2 className="text-xl font-semibold">Withdraw from Pool</h2>
+              </div>
+              <input
+                type="number"
+                placeholder="Amount to withdraw"
+                value={withdrawAmount}
+                className="w-full p-2 border rounded"
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+              />
+              <button className="w-full bg-black text-white py-2 rounded my-4" onClick={handleWithDraw}>Confirm</button>
             </Drawer>
           )}
         </div>

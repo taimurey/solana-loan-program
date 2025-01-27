@@ -165,12 +165,12 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     try {
       // If you want all transactions, do this:
       const q = collection(db, "transactions");
-
+      
       // If you want only transactions for your user, 
       // you'd need a field like `creator` in the transaction doc 
       // or something else to filter. For example:
       // const q = query(collection(db, "transactions"), where("creator", "==", publicKey.toBase58()))
-
+      
       const querySnapshot = await getDocs(q);
       const fetchedTransactions: Transaction[] = [];
 
@@ -198,6 +198,7 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
         };
         fetchedTransactions.push(tx);
       });
+      console.log("Fetching all transactions...", fetchedTransactions); 
 
       setAllTransactions(fetchedTransactions);
     } catch (error) {

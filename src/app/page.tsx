@@ -19,9 +19,14 @@ import { buildVersionedTransaction } from "@/components/instructions/buildTransa
 import { SendTransaction } from "@/components/instructions/transaction-send";
 import { doc, updateDoc, addDoc, collection, deleteDoc } from "firebase/firestore";
 import { db } from "@/utils/firebaseconfig"; // <-- import the Firestore instance from your firebase.ts
-import { PublicKey } from "@solana/web3.js"; // Ensure you import this if not already included
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-
+import {
+    PublicKey,
+    Transaction as SolanaTransaction,
+    SystemProgram,
+    LAMPORTS_PER_SOL,
+  } from "@solana/web3.js";
+  
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "password123";
 interface Pool {
@@ -413,104 +418,209 @@ const Page = () => {
             contractTerms: "",
             depositedState: "not deposited",
             amount: "0.00",
-            tokenAddress: "dfsgdsgd423fsgfsgdfsgdfsgdfsgdfsgdfsgsdf54",
+            tokenAddress: selectedPool.tokenMint?.toBase58() || "",
             poolDocId: selectedPool.docId || "",
         });
 
         setIsContinueDrawerOpen(true);
     };
 
-    const handleSaveTransaction = async () => {
-        try {
-            if (!continuePool) {
-                toast.error("No pool selected!");
-                return;
+// Step 1) "Save Transaction" remains the same
+const handleSaveTransaction = async () => {
+    try {
+      if (!continuePool) {
+        toast.error("No pool selected!");
+        return;
+      }
+  
+      // 1) Build new transaction data
+      const newTransaction: Transaction = {
+        poolDocId: continuePool.docId || "",
+        poolName: continuePool.poolName,
+        transactionDate: transactionDetails.transactionDate,
+        fullName: transactionDetails.fullName,
+        email: transactionDetails.email,
+        phoneNumber: transactionDetails.phoneNumber,
+        streetLine1: transactionDetails.streetLine1,
+        streetLine2: transactionDetails.streetLine2,
+        zipCode: transactionDetails.zipCode,
+        city: transactionDetails.city,
+        region: transactionDetails.region,
+        country: transactionDetails.country,
+        contractTerms: transactionDetails.contractTerms,
+        depositedState: "not deposited", // set default as not yet deposited
+        amount: transactionDetails.amount,
+        tokenAddress: transactionDetails.tokenAddress,
+      };
+  
+      // 2) Save to Firestore
+      const docRef = await addDoc(collection(db, "transactions"), newTransaction);
+  
+      // 3) Store docId in local state for future updates
+      const savedTransaction = { ...newTransaction, docId: docRef.id };
+  
+      // 4) Update your global or local state
+      setAllTransactions([...allTransactions, savedTransaction]);
+  
+      toast.success("Transaction saved successfully!");
+      setIsContinueDrawerOpen(false);
+  
+      // 5) Open deposit drawer
+      setIsDepositDrawerOpen(true);
+      setTobeDepositedTransaction(savedTransaction);
+  
+    } catch (error) {
+      console.error("Error saving transaction:", error);
+      toast.error("Failed to save transaction");
+    }
+  };
+  
+  
+  // Step 2) "Deposit via Solana" updated to do a real SOL transfer
+  const handleDepositViaSolana = async () => {
+    try {
+      if (!walletContext?.publicKey || !walletContext.sendTransaction) {
+        toast.error("Wallet not connected or cannot sign transactions");
+        return;
+      }
+  
+      // Make sure we have an amount & address
+      if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
+        toast.error("Please fill in all fields (amount, address).");
+        return;
+      }
+  
+      // Convert user input to a valid float
+      const solAmount = parseFloat(transactionDetails.amount);
+      if (isNaN(solAmount) || solAmount <= 0) {
+        toast.error("Invalid SOL amount.");
+        return;
+      }
+  
+      // Convert SOL to lamports
+      const lamports = Math.round(solAmount * LAMPORTS_PER_SOL);
+  
+      // Parse the destination address
+      const toPubkey = new PublicKey(transactionDetails.tokenAddress.trim());
+  
+      // Build transfer instruction
+      const transferIx = SystemProgram.transfer({
+        fromPubkey: walletContext.publicKey,
+        toPubkey,
+        lamports,
+      });
+  
+      // Create a transaction and add the instruction
+      const transaction = new SolanaTransaction().add(transferIx);
+  
+      // (Optional) Let the wallet handle recent blockhash automatically or 
+      // you can fetch and set it yourself.
+  
+      // Send the transaction (Phantom will prompt approval)
+      const signature = await walletContext.sendTransaction(transaction, connection);
+  
+      // Wait for confirmation
+      await connection.confirmTransaction(signature, "confirmed");
+  
+      // If we have an active transaction in local state, update Firestore
+      if (tobeDepositedTransaction) {
+        const updatedTransaction = {
+          ...tobeDepositedTransaction,
+          amount: transactionDetails.amount,  // store final deposit amount
+          depositedState: "deposited",
+          solanaTxSignature: signature,       // store signature
+        };
+  
+        // Update local transactions array
+        const updatedTransactions = allTransactions.map((tx) =>
+          tx.docId === tobeDepositedTransaction.docId ? updatedTransaction : tx
+        );
+        setAllTransactions(updatedTransactions);
+  
+        // Update Firestore doc
+        if (tobeDepositedTransaction.docId) {
+          await updateDoc(
+            doc(db, "transactions", tobeDepositedTransaction.docId),
+            {
+              amount: transactionDetails.amount,
+              depositedState: "deposited",
+              solanaTxSignature: signature,
             }
-
-            // 1) Build new transaction data
-            const newTransaction: Transaction = {
-                // Link the pool doc ID if available
-                poolDocId: continuePool.docId || "",
-                poolName: continuePool.poolName, // or continuePool.name if that’s the correct field
-                transactionDate: transactionDetails.transactionDate,
-                fullName: transactionDetails.fullName,
-                email: transactionDetails.email,
-                phoneNumber: transactionDetails.phoneNumber,
-                streetLine1: transactionDetails.streetLine1,
-                streetLine2: transactionDetails.streetLine2,
-                zipCode: transactionDetails.zipCode,
-                city: transactionDetails.city,
-                region: transactionDetails.region,
-                country: transactionDetails.country,
-                contractTerms: transactionDetails.contractTerms,
-                depositedState: transactionDetails.depositedState,
-                amount: transactionDetails.amount,
-                tokenAddress: transactionDetails.tokenAddress,
-            };
-
-            // 2) Save to Firestore
-            const docRef = await addDoc(collection(db, "transactions"), newTransaction);
-
-            // 3) Store docId in local state for future updates
-            const savedTransaction = { ...newTransaction, docId: docRef.id };
-
-            // 4) Update your global or local state
-            setAllTransactions([...allTransactions, savedTransaction]);
-
-            toast.success("Transaction saved successfully!");
-            setIsContinueDrawerOpen(false);
-            // Also open deposit drawer or do any next steps
-            setIsDepositDrawerOpen(true);
-            setTobeDepositedTransaction(savedTransaction);
-        } catch (error) {
-            console.error("Error saving transaction:", error);
-            toast.error("Failed to save transaction");
+          );
         }
-    };
+  
+        // Clear the active transaction
+        setTobeDepositedTransaction(null);
+      }
+  
+      // Close the deposit drawer
+      setIsDepositDrawerOpen(false);
+  
+      // Show success with a link to Solscan (Devnet example)
+      toast.success(
+        <div>
+          Deposit via Solana successful!{" "}
+          <a
+            href={`https://solscan.io/tx/${signature}?cluster=devnet`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ textDecoration: "underline" }}
+          >
+            View on Solscan
+          </a>
+        </div>
+      );
+  
+    } catch (error: any) {
+      console.error("Error depositing via Solana:", error);
+      toast.error(`Deposit failed: ${error.message || error.toString()}`);
+    }
+  };
+  
 
-    const handleDepositViaSolana = async () => {
-        if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
-            toast.error("Please fill in all fields.");
-            return;
-        }
+    // const handleDepositViaSolana = async () => {
+    //     if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
+    //         toast.error("Please fill in all fields.");
+    //         return;
+    //     }
 
-        if (tobeDepositedTransaction) {
-            // Create an updated transaction in local state
-            const updatedTransaction = {
-                ...tobeDepositedTransaction,
-                amount: transactionDetails.amount,
-                depositedState: "deposited",
-            };
+    //     if (tobeDepositedTransaction) {
+    //         // Create an updated transaction in local state
+    //         const updatedTransaction = {
+    //             ...tobeDepositedTransaction,
+    //             amount: transactionDetails.amount,
+    //             depositedState: "deposited",
+    //         };
 
-            // Update the global state
-            const updatedTransactions = allTransactions.map((t) =>
-                t.docId === tobeDepositedTransaction.docId ? updatedTransaction : t
-            );
-            setAllTransactions(updatedTransactions);
+    //         // Update the global state
+    //         const updatedTransactions = allTransactions.map((t) =>
+    //             t.docId === tobeDepositedTransaction.docId ? updatedTransaction : t
+    //         );
+    //         setAllTransactions(updatedTransactions);
 
-            // 1) Update Firestore if we have a docId
-            if (tobeDepositedTransaction.docId) {
-                try {
-                    await updateDoc(
-                        doc(db, "transactions", tobeDepositedTransaction.docId),
-                        {
-                            amount: transactionDetails.amount,
-                            depositedState: "deposited",
-                        }
-                    );
-                } catch (error) {
-                    console.error("Error updating transaction in Firestore:", error);
-                    toast.error("Could not update transaction in Firestore");
-                }
-            }
+    //         // 1) Update Firestore if we have a docId
+    //         if (tobeDepositedTransaction.docId) {
+    //             try {
+    //                 await updateDoc(
+    //                     doc(db, "transactions", tobeDepositedTransaction.docId),
+    //                     {
+    //                         amount: transactionDetails.amount,
+    //                         depositedState: "deposited",
+    //                     }
+    //                 );
+    //             } catch (error) {
+    //                 console.error("Error updating transaction in Firestore:", error);
+    //                 toast.error("Could not update transaction in Firestore");
+    //             }
+    //         }
 
-            // Clear the active transaction
-            setTobeDepositedTransaction(null);
-        }
+    //         // Clear the active transaction
+    //         setTobeDepositedTransaction(null);
+    //     }
 
-        setIsDepositDrawerOpen(false);
-        toast.success("Deposit via Solana successful!");
-    };
+    //     setIsDepositDrawerOpen(false);
+    //     toast.success("Deposit via Solana successful!");
+    // };
 
 
     const handleDepositViaStripe = async (amount: number) => {
@@ -532,7 +642,7 @@ const Page = () => {
             if (tobeDepositedTransaction.docId) {
                 try {
                     await updateDoc(doc(db, "transactions", tobeDepositedTransaction.docId), {
-                        amount: amount.toString(),
+                        amount: tobeDepositedTransaction.amount,// will be replaced when strip starts working, added same, just not to overwrite solana added amount
                         depositedState: "deposited",
                     });
                 } catch (error) {
@@ -707,14 +817,14 @@ const Page = () => {
                                 <InputField label="Interest Rate" name="interestRateBps" type="number" placeholder="Interest Rate" value={newPool.interestRateBps || ""} onChange={handleInputChange} />
                                 <InputField label="Loan Term" name="loanTermMonths" type="number" placeholder="Loan Term" value={newPool.loanTermMonths || ""} onChange={handleInputChange} />
                                 <InputField label="Payment Frequency" name="paymentFrequency" type="number" placeholder="Payment Frequency" value={newPool.paymentFrequency || ""} onChange={handleInputChange} />
-                                <InputField
+                                {/* <InputField
                                     label="Address"
                                     name="poolAddress"
                                     type="text"
                                     placeholder="Address"
                                     value={typeof newPool.poolAddress === "string" ? newPool.poolAddress : ""}
                                     onChange={handleInputChange}
-                                />
+                                /> */}
                                 <InputField label="Contract Terms" name="contractTerms" type="text" placeholder="Contract Terms" value={newPool.contractTerms || ""} onChange={handleInputChange} />
                                 <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded">{isEditing ? "Update Pool" : "Create Pool"} </button>
                             </form>
@@ -961,7 +1071,7 @@ const Page = () => {
             </SecondaryLayout>
         )
             : (
-                <div className="flex justify-center items-center h-screen bg-gray-100">
+                <div className="flex justify-center items-center h-[90vh] bg-gray-100">
                     <WalletMultiButton className="bg-[#2463eb] px-3 py-2 rounded-xl" />
                 </div>
             )
