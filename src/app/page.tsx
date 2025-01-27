@@ -271,10 +271,10 @@ const Page = () => {
                 timestamp: new Date().toISOString(),
 
                 // on-chain addresses
-                poolAddress: instruction.poolAddress,   // if you return it from createPool
-                vaultAddress: instruction.vaultAddress, // if you return it
-                vaultAuthority: instruction.vaultAuthority, // if you return it
-                tokenMint: instruction.tokenMint,       // if you return it
+                poolAddress: 'instruction.poolAddress',   // if you return it from createPool
+                vaultAddress: 'instruction.vaultAddress', // if you return it
+                vaultAuthority: ' instruction.vaultAuthority', // if you return it
+                tokenMint: 'instruction.tokenMint',       // if you return it
 
                 // transaction
                 transactionSignature: signature,

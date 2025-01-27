@@ -2,7 +2,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Keypair, Transaction } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction } from "@solana/spl-token";
-import { LoanProgram } from "../../../../target/types/loan_program";
+import { LoanProgram } from "../../target/types/loan_program";
 
 /**
  * Create an associated token account (ATA) for the user if it doesn't exist
