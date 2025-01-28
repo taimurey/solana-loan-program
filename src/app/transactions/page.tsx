@@ -28,6 +28,10 @@ import {
 } from "@solana/web3.js";
 import { AnchorProvider } from "@coral-xyz/anchor";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { withdraw } from "@/components/instructions/withdraw";
+import { deposit } from "@/components/instructions/deposit";
+import { buildVersionedTransaction } from "@/components/instructions/buildTransaction";
+import { SendTransaction } from "@/components/instructions/transaction-send";
 
 interface Transaction {
   docId?: string;            // Firestore document ID
@@ -69,7 +73,6 @@ const Page = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentAmount, setCurrentAmount] = useState<number>(0);
   const [currentTransactionId, setCurrentTransactionId] = useState<string>("");
-
   const router = useRouter();
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -89,7 +92,7 @@ const Page = () => {
 
   const [transactionDetails, setTransactionDetails] = useState<Transaction>({
     poolName: "",
-    transactionDate: new Date().toISOString().split("T")[0], // Default to today's date
+    transactionDate: new Date().toISOString().split("T")[0],
     fullName: "",
     email: "",
     phoneNumber: "",
@@ -107,6 +110,9 @@ const Page = () => {
 
   });
 
+  const confirmOptions = {
+    skipPreflight: true,
+  };
 
   const handleDepositViaSolana = async () => {
     try {
@@ -130,21 +136,37 @@ const Page = () => {
       const lamports = Math.round(solAmount * LAMPORTS_PER_SOL);
 
       // Parse the destination address
-      const toPubkey = new PublicKey(transactionDetails.tokenAddress.trim());
+      const Mint = new PublicKey(transactionDetails.tokenAddress);
 
       // Build transfer instruction
-      const transferIx = SystemProgram.transfer({
-        fromPubkey: walletContext.publicKey,
-        toPubkey,
-        lamports,
-      });
 
-      // Create a transaction and add the instruction
-      const transaction = new SolanaTransaction().add(transferIx);
+
+      const provider = new AnchorProvider(
+        connection,
+        wallet!,
+        AnchorProvider.defaultOptions()
+      );
+      const program = new anchor.Program<LoanProgram>(IDL, LoanProgramID, provider);
+
+      const instruction = await deposit(
+        program,
+        wallet?.publicKey!,
+        transactionDetails.poolAddress,
+        Mint,
+        lamports,
+        Array.from(agreementHash),
+      )
+
+      const versionedtransaction = await buildVersionedTransaction({
+        instructions: [instruction.instruction],
+        wallet: walletContext,
+        connection
+      })
 
       // Send the transaction
-      const signature = await walletContext.sendTransaction(transaction, connection);
-      await connection.confirmTransaction(signature, "confirmed");
+      const signature = await SendTransaction(versionedtransaction, connection, walletContext);
+
+
 
       if (tobeDepositedTransaction && tobeDepositedTransaction.docId) {
         const docRef = doc(db, "transactions", tobeDepositedTransaction.docId);
@@ -275,50 +297,73 @@ const Page = () => {
       return;
     }
     toast.info("Withdraw functioanlity is not implemented yet");
-    // try {
-    //   // Define poolPublicKey
-    //   const poolPublicKey = new PublicKey("YourPoolPublicKeyHere");
+    try {
+      // Define poolPublicKey
+      const poolPublicKey = new PublicKey("YourPoolPublicKeyHere");
 
-    //   // Define poolVault
-    //   const poolVault = new PublicKey("YourPoolVaultPublicKeyHere");
+      // Define poolVault
+      const poolVault = new PublicKey("YourPoolVaultPublicKeyHere");
 
-    //   // 1) Build your program
-    //   const provider = new AnchorProvider(
-    //     connection,
-    //     wallet,
-    //     AnchorProvider.defaultOptions()
-    //   );
-    //   const program = new anchor.Program<LoanProgram>(IDL, LoanProgramID, provider);
+      // 1) Build your program
+      const provider = new AnchorProvider(
+        connection,
+        wallet,
+        AnchorProvider.defaultOptions()
+      );
+      const program = new anchor.Program<LoanProgram>(IDL, LoanProgramID, provider);
 
-    //   // 2) Convert user input to BN lamports
-    //   const lamports = new BN(Math.round(parseFloat(withdrawAmount) * 1_000_000_000));
+      const Mint = new PublicKey(transactionDetails.tokenAddress);
 
-    //   // 3) Call your instruction
-    //   const signature = await program.methods
-    //     .withdraw(lamports)
-    //     .accounts({
-    //       pool: poolPublicKey,
-    //       user: wallet.publicKey,
-    //       poolVault,
-    //       userTokenAccount: new PublicKey("YourUserTokenAccountPublicKeyHere"),
-    //       tokenProgram: TOKEN_PROGRAM_ID,
-    //     })
-    //     .rpc();
+      // Step 3: Get the pool account to fetch deposit count
+      const poolAccount = await program.account.pool.fetch(poolAddress);
+      const depositCount = poolAccount.depositCount;
 
-    //   // 4) Wait or confirm. Then update Firestore if desired
-    //   toast.success(`Withdraw transaction signature: ${signature}`);
-    //   // Possibly store that the user withdrew `withdrawAmount` from Firestore
+      // Convert depositCount (BN) to a number
+      const depositCountNumber = depositCount.toNumber();
 
-    //   setIsWithdrawOpen(false);
+      const [depositAddress] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("deposit"),
+          wallet.publicKey.toBuffer(),
+          poolAddress.toBuffer(),
+          Buffer.from([depositCountNumber]),
+        ],
+        program.programId
+      );
 
-    // } catch (error) {
-    //   console.error("Withdraw failed:", error);
-    //   if (error instanceof Error) {
-    //     toast.error(`Withdraw failed: ${error.message}`);
-    //   } else {
-    //     toast.error("Withdraw failed: An unknown error occurred.");
-    //   }
-    // }
+      const instruction = await withdraw(
+        program,
+        wallet.publicKey, // Use admin as the withdrawer
+        poolPublicKey, // Use the created pool address
+        Mint,
+        500, // Amount to withdraw (half of the deposited amount)
+        depositAddress, // Use the deposit address created earlier
+        confirmOptions
+      );
+
+      const versionedtransaction = await buildVersionedTransaction({
+        instructions: [instruction.instructions],
+        wallet: walletContext,
+        connection
+      })
+
+      // Send the transaction
+      const signature = await SendTransaction(versionedtransaction, connection, walletContext);
+
+      // 4) Wait or confirm. Then update Firestore if desired
+      toast.success(`Withdraw transaction signature: ${signature}`);
+      // Possibly store that the user withdrew `withdrawAmount` from Firestore
+
+      setIsWithdrawOpen(false);
+
+    } catch (error) {
+      console.error("Withdraw failed:", error);
+      if (error instanceof Error) {
+        toast.error(`Withdraw failed: ${error.message}`);
+      } else {
+        toast.error("Withdraw failed: An unknown error occurred.");
+      }
+    }
   };
 
 

@@ -580,40 +580,40 @@ const Page = () => {
 
     const handleDepositViaStripe = async (usdAmount: number) => {
         if (!tobeDepositedTransaction) {
-          toast.error("No transaction selected!");
-          return;
+            toast.error("No transaction selected!");
+            return;
         }
-      
+
         try {
-          // 1) Convert USD to cents
-          const amountInCents = Math.round(usdAmount * 100);
-      
-          // 2) Call our Next.js API route to create a session
-          const res = await fetch("/api/stripe/create-checkout-session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              amount: amountInCents,
-              transactionDocId: tobeDepositedTransaction.docId,
-            }),
-          });
-      
-          if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.message);
-          }
-      
-          const { url } = await res.json();
-      
-          // 3) Redirect to Stripe Checkout
-          window.location.href = url; 
-      
+            // 1) Convert USD to cents
+            const amountInCents = Math.round(usdAmount * 100);
+
+            // 2) Call our Next.js API route to create a session
+            const res = await fetch("/api/stripe/create-checkout-session", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    amount: amountInCents,
+                    transactionDocId: tobeDepositedTransaction.docId,
+                }),
+            });
+
+            if (!res.ok) {
+                const error = await res.json();
+                throw new Error(error.message);
+            }
+
+            const { url } = await res.json();
+
+            // 3) Redirect to Stripe Checkout
+            window.location.href = url;
+
         } catch (error: any) {
-          console.error("Stripe checkout error:", error);
-          toast.error(`Stripe checkout error: ${error.message || error.toString()}`);
+            console.error("Stripe checkout error:", error);
+            toast.error(`Stripe checkout error: ${error.message || error.toString()}`);
         }
-      };
-      
+    };
+
 
 
     const handleCloseDepositDrawer = () => {

@@ -11,30 +11,27 @@ import { LoanProgram } from "./loan_program";
  * @param poolAddress - Address of the pool
  * @param tokenMint - Token mint address (USDC or NATIVE_MINT for SOL)
  * @param amount - Amount to deposit (in smallest units, e.g., lamports for SOL)
- * @param feePercent - Fee percentage (e.g., 5 for 5%)
  * @param agreementHash - Agreement hash (32-byte array)
  * @param confirmOptions - Transaction confirmation options
  */
 export async function deposit(
     program: Program<LoanProgram>,
-    user: Keypair,
+    user: PublicKey,
     poolAddress: PublicKey,
     tokenMint: PublicKey,
     amount: number,
-    feePercent: number,
     agreementHash: number[],
-    confirmOptions?: anchor.web3.ConfirmOptions
 ) {
     try {
         // Step 1: Get the user's token account
         const userTokenAccount = await anchor.utils.token.associatedAddress({
             mint: tokenMint,
-            owner: user.publicKey,
+            owner: user,
         });
 
         // Step 2: Derive PDAs
         const [userStatsAddress] = PublicKey.findProgramAddressSync(
-            [Buffer.from("user_stats"), user.publicKey.toBuffer()],
+            [Buffer.from("user_stats"), user.toBuffer()],
             program.programId
         );
 
@@ -58,7 +55,7 @@ export async function deposit(
         const [depositAddress] = PublicKey.findProgramAddressSync(
             [
                 Buffer.from("deposit"),
-                user.publicKey.toBuffer(),
+                user.toBuffer(),
                 poolAddress.toBuffer(),
                 Buffer.from([depositCountNumber]), // Use the number value
             ],
@@ -73,16 +70,16 @@ export async function deposit(
         if (tokenMint.equals(NATIVE_MINT)) {
             // Create ATA if it doesn't exist
             const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
-                user.publicKey,
+                user,
                 userTokenAccount,
-                user.publicKey,
+                user,
                 NATIVE_MINT
             );
             preInstructions.push(createAtaIx);
 
             // Transfer SOL to WSOL account
             const transferSolIx = SystemProgram.transfer({
-                fromPubkey: user.publicKey,
+                fromPubkey: user,
                 toPubkey: userTokenAccount,
                 lamports: amount,
             });
@@ -94,7 +91,7 @@ export async function deposit(
         }
 
         // Step 5: Build and send the deposit transaction
-        const tx = await program.methods
+        const instruction = await program.methods
             .deposit(
                 new anchor.BN(amount), // Amount
                 Array.from(agreementHashArray) // Agreement hash
@@ -102,7 +99,7 @@ export async function deposit(
             .accounts({
                 pool: poolAddress,
                 deposit: depositAddress,
-                payer: user.publicKey,
+                payer: user,
                 vaultAuthority,
                 userTokenAccount,
                 poolVault: vaultAddress,
@@ -113,14 +110,12 @@ export async function deposit(
                 associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             })
             .preInstructions(preInstructions) // Add pre-instructions
-            .signers([user])
-            .rpc(confirmOptions);
+            .instruction();
 
-        console.log("Deposit Transaction Signature:", tx);
         console.log("Deposit Address:", depositAddress.toString());
 
         return {
-            tx,
+            instruction,
             depositAddress,
             userStatsAddress,
             vaultAddress,

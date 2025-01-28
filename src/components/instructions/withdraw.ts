@@ -16,7 +16,7 @@ import { LoanProgram } from "./loan_program";
  */
 export async function withdraw(
     program: Program<LoanProgram>,
-    user: Keypair,
+    user: PublicKey,
     poolAddress: PublicKey,
     tokenMint: PublicKey,
     amount: number,
@@ -27,12 +27,12 @@ export async function withdraw(
         // Step 1: Get the user's token account
         const userTokenAccount = await anchor.utils.token.associatedAddress({
             mint: tokenMint,
-            owner: user.publicKey,
+            owner: user,
         });
 
         // Step 2: Derive PDAs
         const [userStatsAddress] = PublicKey.findProgramAddressSync(
-            [Buffer.from("user_stats"), user.publicKey.toBuffer()],
+            [Buffer.from("user_stats"), user.toBuffer()],
             program.programId
         );
 
@@ -55,12 +55,12 @@ export async function withdraw(
         const vaultBump = poolAccount.vaultBump;
 
         // Step 4: Build and send the withdraw transaction
-        const tx = await program.methods
+        const instructions = await program.methods
             .withdraw(
                 new anchor.BN(amount) // Amount
             )
             .accounts({
-                user: user.publicKey,
+                user: user,
                 deposit: depositAddress,
                 userStats: userStatsAddress,
                 userTokenAccount,
@@ -78,13 +78,12 @@ export async function withdraw(
                     isSigner: false,
                 },
             ])
-            .signers([user])
-            .rpc(confirmOptions);
+            .instruction();
 
-        console.log("Withdraw Transaction Signature:", tx);
+        console.log("Withdraw Transaction Signature:", instructions);
 
         return {
-            tx,
+            instructions,
             userStatsAddress,
             vaultAddress,
         };
