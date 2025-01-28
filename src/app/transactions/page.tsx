@@ -167,8 +167,51 @@ const Page = () => {
         connection
       })
 
-      // Send the transaction
-      const signature = await SendTransaction(versionedtransaction, connection, walletContext);
+      let signature;
+      try {
+        // Send the transaction
+        signature = await SendTransaction(versionedtransaction, connection, walletContext);
+
+
+        // Display a success toast with a link to the transaction
+        toast.info(
+          <div>
+            Deposited successfully!{" "}
+            <a
+              href={`https://solscan.io/tx/${signature}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: "underline" }}
+            >
+              View transaction
+            </a>
+          </div>,
+          {
+            position: "top-right",
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+          }
+        );
+
+      } catch (error: any) {
+        console.error('Error sending transaction:', error);
+
+        // Display an error toast
+        toast.error(`Failed to send transaction: ${error.message}`, {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+        });
+      }
+
 
 
 
@@ -300,13 +343,7 @@ const Page = () => {
       toast.error("Wallet not connected!");
       return;
     }
-    toast.info("Withdraw functioanlity is not implemented yet");
     try {
-      // Define poolPublicKey
-      const poolPublicKey = new PublicKey("YourPoolPublicKeyHere");
-
-      // Define poolVault
-      const poolVault = new PublicKey("YourPoolVaultPublicKeyHere");
 
       // 1) Build your program
       const provider = new AnchorProvider(
@@ -338,7 +375,7 @@ const Page = () => {
       const instruction = await withdraw(
         program,
         wallet.publicKey, // Use admin as the withdrawer
-        poolPublicKey, // Use the created pool address
+        new PublicKey(transactionDetails.poolAddress), // Use the created pool address
         Mint,
         500, // Amount to withdraw (half of the deposited amount)
         depositAddress, // Use the deposit address created earlier
