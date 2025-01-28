@@ -3,104 +3,123 @@
 import React, { useEffect, useState } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/utils/firebaseconfig"; // Ensure Firebase is initialized correctly
-import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 
 export default function PaymentSuccess() {
-    const searchParams = useSearchParams();
-    const amountParam = searchParams.get("amount");
-    const transactionID = searchParams.get("transactionID");
-    const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState<boolean>(false);
+  const router = useRouter();
+  const [amount, setAmount] = useState<number | null>(null);
+  const [transactionID, setTransactionID] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<boolean>(false);
 
-    useEffect(() => {
-        const updateTransaction = async () => {
-            if (!transactionID || !amountParam) {
-                setError("Missing transaction ID or amount.");
-                return;
-            }
+  useEffect(() => {
+    // Function to parse query parameters
+    const parseQueryParams = () => {
+      if (typeof window === "undefined") return;
 
-            // Parse the deposited amount
-            const newAmount = parseFloat(amountParam);
-            if (isNaN(newAmount) || newAmount <= 0) {
-                setError("Invalid deposit amount.");
-                return;
-            }
+      const params = new URLSearchParams(window.location.search);
+      const amt = params.get("amount");
+      const txID = params.get("transactionID");
 
-            try {
-                // Reference to the specific document in Firestore
-                const transactionRef = doc(db, "transactions", transactionID);
+      if (!amt || !txID) {
+        setError("Missing transaction ID or amount.");
+        return;
+      }
 
-                // Fetch the existing transaction document
-                const transactionSnap = await getDoc(transactionRef);
+      const parsedAmount = parseFloat(amt);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        setError("Invalid deposit amount.");
+        return;
+      }
 
-                if (!transactionSnap.exists()) {
-                    setError("Transaction does not exist.");
-                    return;
-                }
+      setAmount(parsedAmount);
+      setTransactionID(txID);
+    };
 
-                const transactionData = transactionSnap.data();
+    parseQueryParams();
+  }, []);
 
-                // Parse the existing amount
-                const existingAmount = parseFloat(transactionData.amount || "0");
-                if (isNaN(existingAmount)) {
-                    setError("Existing transaction amount is invalid.");
-                    return;
-                }
+  useEffect(() => {
+    const updateTransaction = async () => {
+      if (!transactionID || amount === null) {
+        return;
+      }
 
-                // Calculate the new total amount
-                const updatedAmount = existingAmount + newAmount;
+      try {
+        // Reference to the specific document in Firestore
+        const transactionRef = doc(db, "transactions", transactionID);
 
-                // Update the transaction document
-                await updateDoc(transactionRef, {
-                    amount: updatedAmount.toString(),
-                    depositedState: "deposited",
-                });
+        // Fetch the existing transaction document
+        const transactionSnap = await getDoc(transactionRef);
 
-                toast.success("Transaction updated successfully!");
-                setSuccess(true);
-            } catch (err) {
-                console.error("Error updating transaction:", err);
-                setError("Failed to update transaction. Please contact support.");
-            }
-        };
+        if (!transactionSnap.exists()) {
+          setError("Transaction does not exist.");
+          return;
+        }
 
-        updateTransaction();
-    }, [transactionID, amountParam]);
+        const transactionData = transactionSnap.data();
 
-    if (error) {
-        return (
-            <main className="max-w-6xl mx-auto p-10 text-white text-center border m-10 rounded-md bg-gradient-to-tr from-red-500 to-pink-500">
-                <div className="mb-10">
-                    <h1 className="text-4xl font-extrabold mb-2">Payment Failed</h1>
-                    <h2 className="text-2xl">{error}</h2>
-                </div>
-            </main>
-        );
-    }
+        // Parse the existing amount
+        const existingAmount = parseFloat(transactionData.amount);
+        if (isNaN(existingAmount)) {
+          setError("Existing transaction amount is invalid.");
+          return;
+        }
 
-    if (success) {
-        return (
-            <main className="max-w-6xl mx-auto p-10 text-white text-center border m-10 rounded-md bg-gradient-to-tr from-green-500 to-teal-500">
-                <div className="mb-10">
-                    <h1 className="text-4xl font-extrabold mb-2">Thank You!</h1>
-                    <h2 className="text-2xl">Your payment was successful.</h2>
+        // Calculate the new total amount
+        const updatedAmount = existingAmount + amount;
 
-                    <div className="bg-white p-2 rounded-md text-green-500 mt-5 text-4xl font-bold">
-                        {amountParam}
-                    </div>
-                </div>
-            </main>
-        );
-    }
+        // Update the transaction document
+        await updateDoc(transactionRef, {
+          amount: updatedAmount, // Store as number
+          depositedState: "deposited",
+        });
 
-    // While updating
+        toast.success("Transaction updated successfully!");
+        setSuccess(true);
+      } catch (err) {
+        console.error("Error updating transaction:", err);
+        setError("Failed to update transaction. Please contact support.");
+      }
+    };
+
+    updateTransaction();
+  }, [transactionID, amount]);
+
+  if (error) {
     return (
-        <main className="max-w-6xl mx-auto p-10 text-white text-center border m-10 rounded-md bg-gradient-to-tr from-blue-500 to-purple-500">
-            <div className="mb-10">
-                <h1 className="text-4xl font-extrabold mb-2">Processing Your Payment...</h1>
-                <h2 className="text-2xl">Please wait a moment.</h2>
-            </div>
-        </main>
+      <main className="max-w-6xl mx-auto p-10 text-white text-center border m-10 rounded-md bg-gradient-to-tr from-red-500 to-pink-500">
+        <div className="mb-10">
+          <h1 className="text-4xl font-extrabold mb-2">Payment Failed</h1>
+          <h2 className="text-2xl">{error}</h2>
+        </div>
+      </main>
     );
+  }
+
+  if (success) {
+    return (
+      <main className="max-w-6xl mx-auto p-10 text-white text-center border m-10 rounded-md bg-gradient-to-tr from-green-500 to-teal-500">
+        <div className="mb-10">
+          <h1 className="text-4xl font-extrabold mb-2">Thank You!</h1>
+          <h2 className="text-2xl">Your payment was successful.</h2>
+
+          <div className="bg-white p-2 rounded-md text-green-500 mt-5 text-4xl font-bold">
+            {amount !== null ? `$${amount.toFixed(2)}` : ""}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // While updating
+  return (
+    <main className="max-w-6xl mx-auto p-10 text-white text-center border m-10 rounded-md bg-gradient-to-tr from-blue-500 to-purple-500">
+      <div className="mb-10">
+        <h1 className="text-4xl font-extrabold mb-2">Processing Your Payment...</h1>
+        <h2 className="text-2xl">Please wait a moment.</h2>
+      </div>
+    </main>
+  );
 }
