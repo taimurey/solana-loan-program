@@ -266,56 +266,56 @@ const Page = () => {
 
 
   const handleWithDraw = async () => {
-      if (!wallet?.publicKey) {
-        toast.error("Wallet not connected!");
-        return;
-      }
-      toast.info("Withdraw functioanlity is not implemented yet");
-      // try {
-      //   // Define poolPublicKey
-      //   const poolPublicKey = new PublicKey("YourPoolPublicKeyHere");
+    if (!wallet?.publicKey) {
+      toast.error("Wallet not connected!");
+      return;
+    }
+    toast.info("Withdraw functioanlity is not implemented yet");
+    // try {
+    //   // Define poolPublicKey
+    //   const poolPublicKey = new PublicKey("YourPoolPublicKeyHere");
 
-      //   // Define poolVault
-      //   const poolVault = new PublicKey("YourPoolVaultPublicKeyHere");
-  
-      //   // 1) Build your program
-      //   const provider = new AnchorProvider(
-      //     connection,
-      //     wallet,
-      //     AnchorProvider.defaultOptions()
-      //   );
-      //   const program = new anchor.Program<LoanProgram>(IDL, LoanProgramID, provider);
-  
-      //   // 2) Convert user input to BN lamports
-      //   const lamports = new BN(Math.round(parseFloat(withdrawAmount) * 1_000_000_000));
-  
-      //   // 3) Call your instruction
-      //   const signature = await program.methods
-      //     .withdraw(lamports)
-      //     .accounts({
-      //       pool: poolPublicKey,
-      //       user: wallet.publicKey,
-      //       poolVault,
-      //       userTokenAccount: new PublicKey("YourUserTokenAccountPublicKeyHere"),
-      //       tokenProgram: TOKEN_PROGRAM_ID,
-      //     })
-      //     .rpc();
-  
-      //   // 4) Wait or confirm. Then update Firestore if desired
-      //   toast.success(`Withdraw transaction signature: ${signature}`);
-      //   // Possibly store that the user withdrew `withdrawAmount` from Firestore
-  
-      //   setIsWithdrawOpen(false);
-  
-      // } catch (error) {
-      //   console.error("Withdraw failed:", error);
-      //   if (error instanceof Error) {
-      //     toast.error(`Withdraw failed: ${error.message}`);
-      //   } else {
-      //     toast.error("Withdraw failed: An unknown error occurred.");
-      //   }
-      // }
-    };
+    //   // Define poolVault
+    //   const poolVault = new PublicKey("YourPoolVaultPublicKeyHere");
+
+    //   // 1) Build your program
+    //   const provider = new AnchorProvider(
+    //     connection,
+    //     wallet,
+    //     AnchorProvider.defaultOptions()
+    //   );
+    //   const program = new anchor.Program<LoanProgram>(IDL, LoanProgramID, provider);
+
+    //   // 2) Convert user input to BN lamports
+    //   const lamports = new BN(Math.round(parseFloat(withdrawAmount) * 1_000_000_000));
+
+    //   // 3) Call your instruction
+    //   const signature = await program.methods
+    //     .withdraw(lamports)
+    //     .accounts({
+    //       pool: poolPublicKey,
+    //       user: wallet.publicKey,
+    //       poolVault,
+    //       userTokenAccount: new PublicKey("YourUserTokenAccountPublicKeyHere"),
+    //       tokenProgram: TOKEN_PROGRAM_ID,
+    //     })
+    //     .rpc();
+
+    //   // 4) Wait or confirm. Then update Firestore if desired
+    //   toast.success(`Withdraw transaction signature: ${signature}`);
+    //   // Possibly store that the user withdrew `withdrawAmount` from Firestore
+
+    //   setIsWithdrawOpen(false);
+
+    // } catch (error) {
+    //   console.error("Withdraw failed:", error);
+    //   if (error instanceof Error) {
+    //     toast.error(`Withdraw failed: ${error.message}`);
+    //   } else {
+    //     toast.error("Withdraw failed: An unknown error occurred.");
+    //   }
+    // }
+  };
 
 
   const handleCloseDepositDrawer = () => {
@@ -383,7 +383,7 @@ const Page = () => {
                   className={`p-2 rounded text-white w-full ${selectedDepositMethod === "solana" ? "bg-black" : "bg-black/80"}`}
                   onClick={() => setSelectedDepositMethod("solana")}
                 >
-                  USDC (Solana)
+                  Solana
                 </button>
                 <button
                   className={`p-2 text-white rounded w-full ${selectedDepositMethod === "stripe" ? "bg-black" : "bg-black/80"}`}
@@ -396,16 +396,16 @@ const Page = () => {
               {/* Solana Deposit Section */}
               {selectedDepositMethod === "solana" && (
                 <>
-                  <InputField
-                    label="Deposit USDC to this address"
+                  {/* <InputField
+                    label="Deposit SOL to this address"
                     name="tokenAddress"
                     type="text"
                     placeholder="fsurfy734fu3f3y74few349"
                     value={transactionDetails.tokenAddress}
                     onChange={handleTransactionInputChange}
-                  />
+                  /> */}
                   <InputField
-                    label="Deposited Amount"
+                    label="Deposite SOL Amount"
                     name="amount"
                     type="number"
                     placeholder="Amount"

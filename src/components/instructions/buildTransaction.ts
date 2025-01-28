@@ -47,9 +47,9 @@ export async function buildVersionedTransaction({
             transaction.sign(signers);
         }
 
-        const signedTransaction = await wallet.signTransaction!(transaction);
+        // const signedTransaction = await wallet.signTransaction!(transaction);
 
-        return signedTransaction;
+        return transaction;
     } catch (error: any) {
         console.error('Error building versioned transaction:', error);
         throw new Error(`Failed to build versioned transaction: ${error.message}`);

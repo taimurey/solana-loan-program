@@ -25,8 +25,8 @@ import {
     Transaction as SolanaTransaction,
     SystemProgram,
     LAMPORTS_PER_SOL,
-  } from "@solana/web3.js";
-  
+} from "@solana/web3.js";
+
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "password123";
 interface Pool {
@@ -186,7 +186,7 @@ const Page = () => {
     const handleCreatePool = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newPool.poolName || !newPool.description || !newPool.index || !newPool.interestRateBps ||
-            !newPool.loanTermMonths || !newPool.paymentFrequency || !newPool.poolAddress ||
+            !newPool.loanTermMonths || !newPool.paymentFrequency ||
             !newPool.contractTerms) {
             toast.error("All fields are required");
             return;
@@ -425,158 +425,158 @@ const Page = () => {
         setIsContinueDrawerOpen(true);
     };
 
-// Step 1) "Save Transaction" remains the same
-const handleSaveTransaction = async () => {
-    try {
-      if (!continuePool) {
-        toast.error("No pool selected!");
-        return;
-      }
-  
-      // 1) Build new transaction data
-      const newTransaction: Transaction = {
-        poolDocId: continuePool.docId || "",
-        poolName: continuePool.poolName,
-        transactionDate: transactionDetails.transactionDate,
-        fullName: transactionDetails.fullName,
-        email: transactionDetails.email,
-        phoneNumber: transactionDetails.phoneNumber,
-        streetLine1: transactionDetails.streetLine1,
-        streetLine2: transactionDetails.streetLine2,
-        zipCode: transactionDetails.zipCode,
-        city: transactionDetails.city,
-        region: transactionDetails.region,
-        country: transactionDetails.country,
-        contractTerms: transactionDetails.contractTerms,
-        depositedState: "not deposited", // set default as not yet deposited
-        amount: transactionDetails.amount,
-        tokenAddress: transactionDetails.tokenAddress,
-      };
-  
-      // 2) Save to Firestore
-      const docRef = await addDoc(collection(db, "transactions"), newTransaction);
-  
-      // 3) Store docId in local state for future updates
-      const savedTransaction = { ...newTransaction, docId: docRef.id };
-  
-      // 4) Update your global or local state
-      setAllTransactions([...allTransactions, savedTransaction]);
-  
-      toast.success("Transaction saved successfully!");
-      setIsContinueDrawerOpen(false);
-  
-      // 5) Open deposit drawer
-      setIsDepositDrawerOpen(true);
-      setTobeDepositedTransaction(savedTransaction);
-  
-    } catch (error) {
-      console.error("Error saving transaction:", error);
-      toast.error("Failed to save transaction");
-    }
-  };
-  
-  
-  // Step 2) "Deposit via Solana" updated to do a real SOL transfer
-  const handleDepositViaSolana = async () => {
-    try {
-      if (!walletContext?.publicKey || !walletContext.sendTransaction) {
-        toast.error("Wallet not connected or cannot sign transactions");
-        return;
-      }
-  
-      // Make sure we have an amount & address
-      if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
-        toast.error("Please fill in all fields (amount, address).");
-        return;
-      }
-  
-      // Convert user input to a valid float
-      const solAmount = parseFloat(transactionDetails.amount);
-      if (isNaN(solAmount) || solAmount <= 0) {
-        toast.error("Invalid SOL amount.");
-        return;
-      }
-  
-      // Convert SOL to lamports
-      const lamports = Math.round(solAmount * LAMPORTS_PER_SOL);
-  
-      // Parse the destination address
-      const toPubkey = new PublicKey(transactionDetails.tokenAddress.trim());
-  
-      // Build transfer instruction
-      const transferIx = SystemProgram.transfer({
-        fromPubkey: walletContext.publicKey,
-        toPubkey,
-        lamports,
-      });
-  
-      // Create a transaction and add the instruction
-      const transaction = new SolanaTransaction().add(transferIx);
-  
-      // (Optional) Let the wallet handle recent blockhash automatically or 
-      // you can fetch and set it yourself.
-  
-      // Send the transaction (Phantom will prompt approval)
-      const signature = await walletContext.sendTransaction(transaction, connection);
-  
-      // Wait for confirmation
-      await connection.confirmTransaction(signature, "confirmed");
-  
-      // If we have an active transaction in local state, update Firestore
-      if (tobeDepositedTransaction) {
-        const updatedTransaction = {
-          ...tobeDepositedTransaction,
-          amount: transactionDetails.amount,  // store final deposit amount
-          depositedState: "deposited",
-          solanaTxSignature: signature,       // store signature
-        };
-  
-        // Update local transactions array
-        const updatedTransactions = allTransactions.map((tx) =>
-          tx.docId === tobeDepositedTransaction.docId ? updatedTransaction : tx
-        );
-        setAllTransactions(updatedTransactions);
-  
-        // Update Firestore doc
-        if (tobeDepositedTransaction.docId) {
-          await updateDoc(
-            doc(db, "transactions", tobeDepositedTransaction.docId),
-            {
-              amount: transactionDetails.amount,
-              depositedState: "deposited",
-              solanaTxSignature: signature,
+    // Step 1) "Save Transaction" remains the same
+    const handleSaveTransaction = async () => {
+        try {
+            if (!continuePool) {
+                toast.error("No pool selected!");
+                return;
             }
-          );
+
+            // 1) Build new transaction data
+            const newTransaction: Transaction = {
+                poolDocId: continuePool.docId || "",
+                poolName: continuePool.poolName,
+                transactionDate: transactionDetails.transactionDate,
+                fullName: transactionDetails.fullName,
+                email: transactionDetails.email,
+                phoneNumber: transactionDetails.phoneNumber,
+                streetLine1: transactionDetails.streetLine1,
+                streetLine2: transactionDetails.streetLine2,
+                zipCode: transactionDetails.zipCode,
+                city: transactionDetails.city,
+                region: transactionDetails.region,
+                country: transactionDetails.country,
+                contractTerms: transactionDetails.contractTerms,
+                depositedState: "not deposited", // set default as not yet deposited
+                amount: transactionDetails.amount,
+                tokenAddress: transactionDetails.tokenAddress,
+            };
+
+            // 2) Save to Firestore
+            const docRef = await addDoc(collection(db, "transactions"), newTransaction);
+
+            // 3) Store docId in local state for future updates
+            const savedTransaction = { ...newTransaction, docId: docRef.id };
+
+            // 4) Update your global or local state
+            setAllTransactions([...allTransactions, savedTransaction]);
+
+            toast.success("Transaction saved successfully!");
+            setIsContinueDrawerOpen(false);
+
+            // 5) Open deposit drawer
+            setIsDepositDrawerOpen(true);
+            setTobeDepositedTransaction(savedTransaction);
+
+        } catch (error) {
+            console.error("Error saving transaction:", error);
+            toast.error("Failed to save transaction");
         }
-  
-        // Clear the active transaction
-        setTobeDepositedTransaction(null);
-      }
-  
-      // Close the deposit drawer
-      setIsDepositDrawerOpen(false);
-  
-      // Show success with a link to Solscan (Devnet example)
-      toast.success(
-        <div>
-          Deposit via Solana successful!{" "}
-          <a
-            href={`https://solscan.io/tx/${signature}?cluster=devnet`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ textDecoration: "underline" }}
-          >
-            View on Solscan
-          </a>
-        </div>
-      );
-  
-    } catch (error: any) {
-      console.error("Error depositing via Solana:", error);
-      toast.error(`Deposit failed: ${error.message || error.toString()}`);
-    }
-  };
-  
+    };
+
+
+    // Step 2) "Deposit via Solana" updated to do a real SOL transfer
+    const handleDepositViaSolana = async () => {
+        try {
+            if (!walletContext?.publicKey || !walletContext.sendTransaction) {
+                toast.error("Wallet not connected or cannot sign transactions");
+                return;
+            }
+
+            // Make sure we have an amount & address
+            if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
+                toast.error("Please fill in all fields (amount, address).");
+                return;
+            }
+
+            // Convert user input to a valid float
+            const solAmount = parseFloat(transactionDetails.amount);
+            if (isNaN(solAmount) || solAmount <= 0) {
+                toast.error("Invalid SOL amount.");
+                return;
+            }
+
+            // Convert SOL to lamports
+            const lamports = Math.round(solAmount * LAMPORTS_PER_SOL);
+
+            // Parse the destination address
+            const toPubkey = new PublicKey(transactionDetails.tokenAddress.trim());
+
+            // Build transfer instruction
+            const transferIx = SystemProgram.transfer({
+                fromPubkey: walletContext.publicKey,
+                toPubkey,
+                lamports,
+            });
+
+            // Create a transaction and add the instruction
+            const transaction = new SolanaTransaction().add(transferIx);
+
+            // (Optional) Let the wallet handle recent blockhash automatically or 
+            // you can fetch and set it yourself.
+
+            // Send the transaction (Phantom will prompt approval)
+            const signature = await walletContext.sendTransaction(transaction, connection);
+
+            // Wait for confirmation
+            await connection.confirmTransaction(signature, "confirmed");
+
+            // If we have an active transaction in local state, update Firestore
+            if (tobeDepositedTransaction) {
+                const updatedTransaction = {
+                    ...tobeDepositedTransaction,
+                    amount: transactionDetails.amount,  // store final deposit amount
+                    depositedState: "deposited",
+                    solanaTxSignature: signature,       // store signature
+                };
+
+                // Update local transactions array
+                const updatedTransactions = allTransactions.map((tx) =>
+                    tx.docId === tobeDepositedTransaction.docId ? updatedTransaction : tx
+                );
+                setAllTransactions(updatedTransactions);
+
+                // Update Firestore doc
+                if (tobeDepositedTransaction.docId) {
+                    await updateDoc(
+                        doc(db, "transactions", tobeDepositedTransaction.docId),
+                        {
+                            amount: transactionDetails.amount,
+                            depositedState: "deposited",
+                            solanaTxSignature: signature,
+                        }
+                    );
+                }
+
+                // Clear the active transaction
+                setTobeDepositedTransaction(null);
+            }
+
+            // Close the deposit drawer
+            setIsDepositDrawerOpen(false);
+
+            // Show success with a link to Solscan (Devnet example)
+            toast.success(
+                <div>
+                    Deposit via Solana successful!{" "}
+                    <a
+                        href={`https://solscan.io/tx/${signature}?cluster=devnet`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ textDecoration: "underline" }}
+                    >
+                        View on Solscan
+                    </a>
+                </div>
+            );
+
+        } catch (error: any) {
+            console.error("Error depositing via Solana:", error);
+            toast.error(`Deposit failed: ${error.message || error.toString()}`);
+        }
+    };
+
 
     // const handleDepositViaSolana = async () => {
     //     if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
@@ -712,13 +712,13 @@ const handleSaveTransaction = async () => {
 
     const connectWallet = async () => {
         try {
-          const response = await window.solana.connect();
-          console.log('Wallet connected:', response.publicKey.toString());
-          // Now you can set the user state with the wallet info
+            const response = await window.solana.connect();
+            console.log('Wallet connected:', response.publicKey.toString());
+            // Now you can set the user state with the wallet info
         } catch (err) {
-          console.error('Failed to connect wallet', err);
+            console.error('Failed to connect wallet', err);
         }
-      };
+    };
     return (
         user ? (
             <SecondaryLayout title={`Welcome back, ${user.name}`} description="This is your Financial Administrator overview portal.">
@@ -960,7 +960,7 @@ const handleSaveTransaction = async () => {
                                     className={`p-2 rounded text-white w-full ${selectedDepositMethod === "solana" ? "bg-black" : "bg-black/80"}`}
                                     onClick={() => setSelectedDepositMethod("solana")}
                                 >
-                                    USDC (Solana)
+                                    Solana
                                 </button>
                                 <button
                                     className={`p-2 text-white rounded w-full ${selectedDepositMethod === "stripe" ? "bg-black" : "bg-black/80"}`}
