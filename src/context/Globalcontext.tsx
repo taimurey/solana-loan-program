@@ -61,6 +61,8 @@ interface Transaction {
   depositedState: string;
   amount: string;
   tokenAddress: string;
+  poolAddress: string;
+  agreementHash: string;
 }
 
 
@@ -201,6 +203,8 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
           depositedState: data.depositedState || "",
           amount: data.amount || "",
           tokenAddress: data.tokenAddress || "",
+          poolAddress: data.poolAddress || "",
+          agreementHash: data.agreementHash || "",
         };
         fetchedTransactions.push(tx);
       });

@@ -51,6 +51,8 @@ interface Transaction {
   depositedState: string;
   amount: string;
   tokenAddress: string;
+  poolAddress: string;
+  agreementHash: string;
 }
 
 interface InputFieldProps {
@@ -107,6 +109,8 @@ const Page = () => {
     amount: "",
     tokenAddress: "",
     poolDocId: "",
+    poolAddress: "",
+    agreementHash: "",
 
   });
 
@@ -151,10 +155,10 @@ const Page = () => {
       const instruction = await deposit(
         program,
         wallet?.publicKey!,
-        transactionDetails.poolAddress,
+        new PublicKey(transactionDetails.poolAddress),
         Mint,
         lamports,
-        Array.from(agreementHash),
+        Array.from(transactionDetails.agreementHash).map(char => char.charCodeAt(0)),
       )
 
       const versionedtransaction = await buildVersionedTransaction({
@@ -315,7 +319,7 @@ const Page = () => {
       const Mint = new PublicKey(transactionDetails.tokenAddress);
 
       // Step 3: Get the pool account to fetch deposit count
-      const poolAccount = await program.account.pool.fetch(poolAddress);
+      const poolAccount = await program.account.pool.fetch(transactionDetails.poolAddress);
       const depositCount = poolAccount.depositCount;
 
       // Convert depositCount (BN) to a number
@@ -325,7 +329,7 @@ const Page = () => {
         [
           Buffer.from("deposit"),
           wallet.publicKey.toBuffer(),
-          poolAddress.toBuffer(),
+          new PublicKey(transactionDetails.poolAddress).toBuffer(),
           Buffer.from([depositCountNumber]),
         ],
         program.programId

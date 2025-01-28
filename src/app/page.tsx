@@ -73,6 +73,8 @@ interface Transaction {
     depositedState: string;
     amount: string;
     tokenAddress: string;
+    poolAddress: string;
+    agreementHash: string;
 }
 
 
@@ -170,6 +172,8 @@ const Page = () => {
         amount: "",
         tokenAddress: "",
         poolDocId: "",
+        agreementHash: "",
+        poolAddress: "",
 
     });
 
@@ -420,6 +424,8 @@ const Page = () => {
             amount: "0.00",
             tokenAddress: selectedPool.tokenMint?.toBase58() || "",
             poolDocId: selectedPool.docId || "",
+            agreementHash: selectedPool.agreementHash,
+            poolAddress: selectedPool.poolAddress?.toBase58() || "",
         });
 
         setIsContinueDrawerOpen(true);
@@ -451,6 +457,8 @@ const Page = () => {
                 depositedState: "not deposited", // set default as not yet deposited
                 amount: transactionDetails.amount,
                 tokenAddress: transactionDetails.tokenAddress,
+                poolAddress: continuePool.poolAddress?.toBase58() || "",
+                agreementHash: continuePool.agreementHash
             };
 
             // 2) Save to Firestore
