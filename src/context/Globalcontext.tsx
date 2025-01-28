@@ -74,6 +74,10 @@ interface GlobalContextType {
   setAllTransactions: (transactions: Transaction[]) => void;
   allTransactions: Transaction[];
   pools: Pool[];
+  depositAMountViastripe: number;
+  setDepositAMountViastripe: (amount: number) => void;
+  transactionDocId: string | undefined;
+  setTransactionDocId: (docId: string | undefined) => void;
 }
 
 const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
@@ -89,6 +93,8 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
   const [pools, setPools] = useState<Pool[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [depositAMountViastripe, setDepositAMountViastripe] = useState<number>(0);
+  const [transactionDocId, setTransactionDocId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     // If we have a connected wallet, set user info and fetch data
@@ -165,12 +171,12 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     try {
       // If you want all transactions, do this:
       const q = collection(db, "transactions");
-      
+
       // If you want only transactions for your user, 
       // you'd need a field like `creator` in the transaction doc 
       // or something else to filter. For example:
       // const q = query(collection(db, "transactions"), where("creator", "==", publicKey.toBase58()))
-      
+
       const querySnapshot = await getDocs(q);
       const fetchedTransactions: Transaction[] = [];
 
@@ -198,7 +204,7 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
         };
         fetchedTransactions.push(tx);
       });
-      console.log("Fetching all transactions...", fetchedTransactions); 
+      console.log("Fetching all transactions...", fetchedTransactions);
 
       setAllTransactions(fetchedTransactions);
     } catch (error) {
@@ -227,6 +233,10 @@ export function GlobalProvider({ children }: GlobalProviderProps) {
     setAllTransactions,
     allTransactions,
     pools,
+    depositAMountViastripe,
+    setDepositAMountViastripe,
+    transactionDocId,
+    setTransactionDocId,
   }), [user, accounts, isLoading, allTransactions, pools]);
 
   return <GlobalContext.Provider value={value}>{children}</GlobalContext.Provider>;

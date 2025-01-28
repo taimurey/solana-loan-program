@@ -15,6 +15,10 @@ import * as anchor from '@coral-xyz/anchor';
 import { IDL, LoanProgram } from "@/components/instructions/loan_program";
 import BN from "bn.js";
 import { LoanProgramID } from "@/components/instructions/Config";
+import { useRouter } from "next/navigation";
+import dynamic from 'next/dynamic'
+
+const StripeModal = dynamic(() => import('@/components/Stripe'), { ssr: false })
 
 import {
   PublicKey,
@@ -62,9 +66,15 @@ const InputField: React.FC<InputFieldProps> = ({ label, name, type, placeholder,
 );
 const Page = () => {
   const connection = new Connection("https://api.devnet.solana.com");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentAmount, setCurrentAmount] = useState<number>(0);
+  const [currentTransactionId, setCurrentTransactionId] = useState<string>("");
+
+  const router = useRouter();
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const { user, allTransactions, setAllTransactions } = useGlobalContext();
+  const { user, allTransactions, setAllTransactions, depositAMountViastripe,
+    setDepositAMountViastripe, setTransactionDocId, transactionDocId } = useGlobalContext();
   const walletContext = useWallet();
   const wallet = useAnchorWallet();
 
@@ -200,41 +210,32 @@ const Page = () => {
   };
 
   const handleDepositViaStripe = async (amount: number) => {
-    if (tobeDepositedTransaction) {
-      // Create an updated transaction in local state
-      const updatedTransaction = {
-        ...tobeDepositedTransaction,
-        amount: amount.toString(),
-        depositedState: "deposited",
-      };
+    const usdAmount = amount; // Replace with dynamic amount as needed
 
-      // Update the global state
-      const updatedTransactions = allTransactions.map((t) =>
-        t.docId === tobeDepositedTransaction.docId ? updatedTransaction : t
-      );
-      setAllTransactions(updatedTransactions);
+    // Replace this with actual transaction data as needed
+    const transactionData = {
+      amount: usdAmount,
+      status: "pending",
+      createdAt: new Date(),
+      // ...other relevant fields
+    };
 
-      // Firestore update
-      if (tobeDepositedTransaction.docId) {
-        try {
-          await updateDoc(doc(db, "transactions", tobeDepositedTransaction.docId), {
-            amount: tobeDepositedTransaction.amount,// will be replaced when strip starts working, added same, just not to overwrite solana added amount
-            depositedState: "deposited",
-          });
-        } catch (error) {
-          console.error("Error updating transaction in Firestore:", error);
-          toast.error("Could not update transaction in Firestore");
-        }
-      }
+    try {
+      setCurrentAmount(usdAmount);
+      setCurrentTransactionId(tobeDepositedTransaction?.docId as string);
 
-      // Clear the active transaction
-      setTobeDepositedTransaction(null);
+      // Set deposit amount and transactionDocId in global context
+      setDepositAMountViastripe(usdAmount);
+      setTransactionDocId(tobeDepositedTransaction?.docId);
+      console.log(usdAmount, tobeDepositedTransaction?.docId);
+
+      // Open the modal
+      setIsModalOpen(true);
+    } catch (error: any) {
+      console.error("Error creating transaction:", error);
+      toast.error("Failed to initiate deposit. Please try again.");
     }
-
-    setIsDepositDrawerOpen(false);
-    toast.success(`Deposit of $${amount} via Stripe successful!`);
   };
-
 
 
   const handleTransactionInputChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -243,6 +244,9 @@ const Page = () => {
   };
 
 
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+  };
   const handleDelete = async (docId: string | undefined) => {
 
     try {
@@ -370,6 +374,15 @@ const Page = () => {
               ))}
             </tbody>
           </table>
+          {/* Stripe Modal */}
+          {/* <StripeModal isOpen={isModalOpen} onClose={handleCloseModal} amount={depositAMountViastripe} transactionId = {transactionDocId} />
+           */}
+          <StripeModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            amount={currentAmount}
+            transactionId={currentTransactionId}
+          />
           {isdepositDrawerOpen && (
             <Drawer onClose={handleCloseDepositDrawer}>
               <div className="mb-2">

@@ -578,86 +578,42 @@ const Page = () => {
     };
 
 
-    // const handleDepositViaSolana = async () => {
-    //     if (!transactionDetails.tokenAddress || !transactionDetails.amount) {
-    //         toast.error("Please fill in all fields.");
-    //         return;
-    //     }
-
-    //     if (tobeDepositedTransaction) {
-    //         // Create an updated transaction in local state
-    //         const updatedTransaction = {
-    //             ...tobeDepositedTransaction,
-    //             amount: transactionDetails.amount,
-    //             depositedState: "deposited",
-    //         };
-
-    //         // Update the global state
-    //         const updatedTransactions = allTransactions.map((t) =>
-    //             t.docId === tobeDepositedTransaction.docId ? updatedTransaction : t
-    //         );
-    //         setAllTransactions(updatedTransactions);
-
-    //         // 1) Update Firestore if we have a docId
-    //         if (tobeDepositedTransaction.docId) {
-    //             try {
-    //                 await updateDoc(
-    //                     doc(db, "transactions", tobeDepositedTransaction.docId),
-    //                     {
-    //                         amount: transactionDetails.amount,
-    //                         depositedState: "deposited",
-    //                     }
-    //                 );
-    //             } catch (error) {
-    //                 console.error("Error updating transaction in Firestore:", error);
-    //                 toast.error("Could not update transaction in Firestore");
-    //             }
-    //         }
-
-    //         // Clear the active transaction
-    //         setTobeDepositedTransaction(null);
-    //     }
-
-    //     setIsDepositDrawerOpen(false);
-    //     toast.success("Deposit via Solana successful!");
-    // };
-
-
-    const handleDepositViaStripe = async (amount: number) => {
-        if (tobeDepositedTransaction) {
-            // Create an updated transaction in local state
-            const updatedTransaction = {
-                ...tobeDepositedTransaction,
-                amount: amount.toString(),
-                depositedState: "deposited",
-            };
-
-            // Update the global state
-            const updatedTransactions = allTransactions.map((t) =>
-                t.docId === tobeDepositedTransaction.docId ? updatedTransaction : t
-            );
-            setAllTransactions(updatedTransactions);
-
-            // Firestore update
-            if (tobeDepositedTransaction.docId) {
-                try {
-                    await updateDoc(doc(db, "transactions", tobeDepositedTransaction.docId), {
-                        amount: tobeDepositedTransaction.amount,// will be replaced when strip starts working, added same, just not to overwrite solana added amount
-                        depositedState: "deposited",
-                    });
-                } catch (error) {
-                    console.error("Error updating transaction in Firestore:", error);
-                    toast.error("Could not update transaction in Firestore");
-                }
-            }
-
-            // Clear the active transaction
-            setTobeDepositedTransaction(null);
+    const handleDepositViaStripe = async (usdAmount: number) => {
+        if (!tobeDepositedTransaction) {
+          toast.error("No transaction selected!");
+          return;
         }
-
-        setIsDepositDrawerOpen(false);
-        toast.success(`Deposit of $${amount} via Stripe successful!`);
-    };
+      
+        try {
+          // 1) Convert USD to cents
+          const amountInCents = Math.round(usdAmount * 100);
+      
+          // 2) Call our Next.js API route to create a session
+          const res = await fetch("/api/stripe/create-checkout-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              amount: amountInCents,
+              transactionDocId: tobeDepositedTransaction.docId,
+            }),
+          });
+      
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.message);
+          }
+      
+          const { url } = await res.json();
+      
+          // 3) Redirect to Stripe Checkout
+          window.location.href = url; 
+      
+        } catch (error: any) {
+          console.error("Stripe checkout error:", error);
+          toast.error(`Stripe checkout error: ${error.message || error.toString()}`);
+        }
+      };
+      
 
 
     const handleCloseDepositDrawer = () => {
