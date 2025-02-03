@@ -190,7 +190,7 @@ const Page = () => {
     const handleCreatePool = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newPool.poolName || !newPool.description || !newPool.index || !newPool.interestRateBps ||
-            !newPool.loanTermMonths || !newPool.paymentFrequency ||
+            !newPool.loanTermMonths ||
             !newPool.contractTerms) {
             toast.error("All fields are required");
             return;
@@ -268,7 +268,7 @@ const Page = () => {
                 <div>
                     Pool initialized successfully!{" "}
                     <a
-                        href={`https://solscan.io/tx/${signature}`}
+                        href={`https://solscan.io/tx/${signature}?cluster=devnet`}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ textDecoration: "underline" }}
